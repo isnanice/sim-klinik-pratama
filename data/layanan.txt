@@ -1,0 +1,6 @@
+LYN-001|Umum|Konsultasi Umum|75000.0|Pemeriksaan dan konsultasi dokter umum|true|0.0
+LYN-002|Umum|Pemeriksaan Gigi|120000.0|Pembersihan karang dan pemeriksaan gigi|true|0.0
+LYN-003|Spesialis|Konsultasi Penyakit Dalam|150000.0|Konsultasi dan pemeriksaan spesialis penyakit dalam|true|50000.0
+LYN-004|Spesialis|Konsultasi Anak Spesialis|140000.0|Pemeriksaan tumbuh kembang dan penyakit anak|true|50000.0
+LYN-005|Umum|Suntik Vitamin C|50000.0|Injeksi vitamin penambah imun|false|0.0
+LYN-TEST-1|Spesialis|Konsultasi Penyakit Dalam|150000.0|Spesialis|true|50000.0

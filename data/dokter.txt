@@ -1,0 +1,7 @@
+DKT-001|dr. Ani Wijaya|PEREMPUAN|Jl. Malioboro No. 10, Yogyakarta|081234567890|STR-11223344|Umum|false
+DKT-002|dr. Hadi Nugroho, Sp.PD|LAKI_LAKI|Jl. Kaliurang Km 5, Sleman|081298765432|STR-22334455|Penyakit Dalam|true
+DKT-003|drg. Maya Indah|PEREMPUAN|Jl. Solo No. 45, Yogyakarta|085711223344|STR-33445566|Gigi|true
+DKT-004|dr. Budi Santoso, Sp.A|LAKI_LAKI|Jl. Gejayan No. 20, Sleman|087855667788|STR-44556677|Anak|true
+DKT-005|dr. Eko Prasetyo|LAKI_LAKI|Jl. Bantul Km 7, Bantul|082133445566|STR-55667788|Umum|false
+DKT-TEST-1|dr. Hadi Nugroho, Sp.PD|LAKI_LAKI|Yogyakarta|081298765432|STR-12345678|Penyakit Dalam|true
+DKT-006|dr. Test Validasi|LAKI_LAKI||081234567899|STR-999|Umum|true

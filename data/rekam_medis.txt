@@ -1,0 +1,2 @@
+RM-001|PMR-001|PSN-001|DKT-001|2026-11-12|Infeksi saluran pernapasan akut (ISPA)|Pemberian obat simtomatik dan edukasi istirahat cukup|Paracetamol 500mg 3x1, Ambroxol 30mg 3x1|Kontrol ulang jika panas berlanjut lebih dari 3 hari.
+RM-002|PMR-TEST-1|PSN-TEST-1|DKT-TEST-1|2026-11-12|Gastritis Akut dan Dispepsia|Pemberian antasida oral dan edukasi diet lambung|Antasida sirup 3x1 cth, Omeprazole 20mg 2x1|Hindari makanan pedas dan asam selama 1 minggu.
