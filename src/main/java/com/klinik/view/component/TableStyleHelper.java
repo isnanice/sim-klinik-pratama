@@ -1,11 +1,16 @@
 package com.klinik.view.component;
 
-import com.klinik.view.theme.UITheme;
+import java.awt.Color;
+import java.awt.Component;
+import java.awt.Dimension;
 
-import javax.swing.*;
+import javax.swing.BorderFactory;
+import javax.swing.JTable;
+import javax.swing.SwingConstants;
 import javax.swing.table.DefaultTableCellRenderer;
 import javax.swing.table.JTableHeader;
-import java.awt.*;
+
+import com.klinik.view.theme.UITheme;
 
 /**
  * Utilitas helper untuk menata tabel Swing agar konsisten dengan DESIGN.md:
@@ -33,6 +38,20 @@ public class TableStyleHelper {
         header.setForeground(Color.WHITE);
         header.setPreferredSize(new Dimension(header.getWidth(), 32));
         header.setReorderingAllowed(false);
+        header.setDefaultRenderer(new DefaultTableCellRenderer() {
+            
+    @Override
+    public Component getTableCellRendererComponent(JTable t, Object v, boolean sel,
+                                                   boolean foc, int r, int c) {
+        super.getTableCellRendererComponent(t, v, false, false, r, c);
+        setOpaque(true);
+        setBackground(UITheme.PRIMARY);
+        setForeground(Color.WHITE);
+        setFont(UITheme.FONT_BOLD);
+        setBorder(BorderFactory.createEmptyBorder(0, 8, 0, 8));
+        return this;
+    }
+});
 
         // Renderer khusus baris selang-seling & badge status
         table.setDefaultRenderer(Object.class, new DefaultTableCellRenderer() {

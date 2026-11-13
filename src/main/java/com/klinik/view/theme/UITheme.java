@@ -1,13 +1,18 @@
 package com.klinik.view.theme;
 
-import javax.swing.*;
+import java.awt.Color;
+import java.awt.Cursor;
+import java.awt.Dimension;
+import java.awt.Font;
+import java.text.NumberFormat;
+import java.util.Locale;
+
+import javax.swing.JButton;
+import javax.swing.JTextField;
 import javax.swing.border.Border;
 import javax.swing.border.CompoundBorder;
 import javax.swing.border.EmptyBorder;
 import javax.swing.border.LineBorder;
-import java.awt.*;
-import java.text.NumberFormat;
-import java.util.Locale;
 
 /**
  * Token desain dan helper komponen sesuai DESIGN.md:
@@ -56,6 +61,8 @@ public class UITheme {
         btn.setFocusPainted(false);
         btn.setBorder(new CompoundBorder(new LineBorder(PRIMARY_DARK, 1), new EmptyBorder(6, 14, 6, 14)));
         btn.setCursor(new Cursor(Cursor.HAND_CURSOR));
+        btn.setContentAreaFilled(false);
+        btn.setOpaque(true);
         return btn;
     }
 
@@ -67,6 +74,8 @@ public class UITheme {
         btn.setFocusPainted(false);
         btn.setBorder(new CompoundBorder(new LineBorder(PRIMARY, 1), new EmptyBorder(6, 14, 6, 14)));
         btn.setCursor(new Cursor(Cursor.HAND_CURSOR));
+        btn.setContentAreaFilled(false);
+        btn.setOpaque(true);
         return btn;
     }
 
@@ -78,6 +87,8 @@ public class UITheme {
         btn.setFocusPainted(false);
         btn.setBorder(new CompoundBorder(new LineBorder(DANGER.darker(), 1), new EmptyBorder(6, 14, 6, 14)));
         btn.setCursor(new Cursor(Cursor.HAND_CURSOR));
+        btn.setContentAreaFilled(false);
+        btn.setOpaque(true);
         return btn;
     }
 
