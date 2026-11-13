@@ -2,6 +2,7 @@ package com.klinik;
 
 import com.klinik.controller.DokterController;
 import com.klinik.controller.LayananController;
+import com.klinik.controller.PasienController;
 import com.klinik.dao.*;
 import com.klinik.model.Role;
 import com.klinik.view.MainFrame;
@@ -28,9 +29,10 @@ public class App {
             // Inisialisasi Controller
             DokterController dokterController = new DokterController(dokterDAO, pemeriksaanDAO, Role.ADMIN);
             LayananController layananController = new LayananController(layananDAO, Role.ADMIN);
+            PasienController pasienController = new PasienController(pasienDAO, pemeriksaanDAO);
 
             // Tampilkan MainFrame
-            MainFrame mainFrame = new MainFrame(dokterController, layananController);
+            MainFrame mainFrame = new MainFrame(dokterController, layananController, pasienController);
             mainFrame.setVisible(true);
         });
     }

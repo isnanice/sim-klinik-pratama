@@ -1,17 +1,33 @@
 package com.klinik.view;
 
-import com.klinik.controller.DokterController;
-import com.klinik.controller.LayananController;
-import com.klinik.model.Role;
-import com.klinik.view.theme.UITheme;
+import java.awt.BorderLayout;
+import java.awt.CardLayout;
+import java.awt.Color;
+import java.awt.Dimension;
+import java.awt.Font;
+import java.awt.GridBagLayout;
+import java.time.LocalDate;
+import java.time.format.DateTimeFormatter;
 
-import javax.swing.*;
+import javax.swing.BorderFactory;
+import javax.swing.Box;
+import javax.swing.BoxLayout;
+import javax.swing.JFrame;
+import javax.swing.JLabel;
+import javax.swing.JMenu;
+import javax.swing.JMenuBar;
+import javax.swing.JMenuItem;
+import javax.swing.JOptionPane;
+import javax.swing.JPanel;
 import javax.swing.border.CompoundBorder;
 import javax.swing.border.EmptyBorder;
 import javax.swing.border.LineBorder;
-import java.awt.*;
-import java.time.LocalDate;
-import java.time.format.DateTimeFormatter;
+
+import com.klinik.controller.DokterController;
+import com.klinik.controller.LayananController;
+import com.klinik.controller.PasienController;
+import com.klinik.model.Role;
+import com.klinik.view.theme.UITheme;
 
 /**
  * Jendela Utama Aplikasi (DESIGN.md C2).
@@ -24,18 +40,21 @@ public class MainFrame extends JFrame {
 
     private final DokterController dokterController;
     private final LayananController layananController;
+    private final PasienController pasienController;
 
     private DokterView dokterView;
     private LayananView layananView;
+    private PasienView pasienView;
     private JPanel welcomePanel;
 
     private JLabel lblStatusUser;
     private Role currentRole = Role.ADMIN;
     private String currentUsername = "Siti Rahma";
 
-    public MainFrame(DokterController dokterController, LayananController layananController) {
+    public MainFrame(DokterController dokterController, LayananController layananController, PasienController pasienController) {
         this.dokterController = dokterController;
         this.layananController = layananController;
+        this.pasienController = pasienController;
 
         initUI();
     }
@@ -54,11 +73,13 @@ public class MainFrame extends JFrame {
         // Setup Content Panels
         dokterView = new DokterView(dokterController);
         layananView = new LayananView(layananController);
+        pasienView = new PasienView(pasienController);
         welcomePanel = createWelcomePanel();
 
         mainContainer.add(welcomePanel, "BERANDA");
         mainContainer.add(dokterView, "DOKTER");
         mainContainer.add(layananView, "LAYANAN");
+        mainContainer.add(pasienView, "PASIEN");
 
         add(mainContainer, BorderLayout.CENTER);
 
@@ -93,9 +114,7 @@ public class MainFrame extends JFrame {
         });
 
         JMenuItem miPasien = new JMenuItem("Pasien");
-        miPasien.addActionListener(e -> JOptionPane.showMessageDialog(this,
-                "Layar Pasien siap dikembangkan. Modul ini fokus pada Dokter & Layanan sesuai soal.",
-                "Info Modul", JOptionPane.INFORMATION_MESSAGE));
+        miPasien.addActionListener(e -> cardLayout.show(mainContainer, "PASIEN"));
 
         menuMaster.add(miPasien);
         menuMaster.add(miDokter);
