@@ -3,187 +3,188 @@ package com.klinik.dao;
 import com.klinik.model.Layanan;
 import com.klinik.model.LayananSpesialis;
 import com.klinik.model.LayananUmum;
+import com.klinik.util.DatabaseConnection;
+import com.klinik.util.PesanDb;
 
-import java.io.*;
-import java.util.*;
-import java.util.stream.Collectors;
+import java.sql.*;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Optional;
 
 /**
- * Data Access Object untuk entitas Layanan (LayananUmum dan LayananSpesialis).
- * Menyimpan data secara persisten ke file teks/CSV di folder data/layanan.txt.
+ * Data Access Object untuk entitas Layanan menggunakan PostgreSQL JDBC.
+ * Berinteraksi langsung dengan tabel 'layanan' di db_klinik_pratama.
  */
 public class LayananDAO implements GenericDAO<Layanan, String> {
-    private static final String DATA_DIR = "data";
-    private static final String FILE_PATH = DATA_DIR + File.separator + "layanan.txt";
-    private final Map<String, Layanan> storage = new LinkedHashMap<>();
-    private int counter = 0;
 
-    public LayananDAO() {
-        initStorage();
+    public String generateNextId() {
+        String sql = "SELECT fn_id('LYN', nextval('seq_layanan'))";
+        try (Connection c = DatabaseConnection.getConnection();
+             Statement st = c.createStatement();
+             ResultSet rs = st.executeQuery(sql)) {
+            if (rs.next()) {
+                return rs.getString(1);
+            }
+        } catch (Exception ignored) {}
+        return "LYN-" + (System.currentTimeMillis() % 1000000);
     }
 
-    private void initStorage() {
-        File dir = new File(DATA_DIR);
-        if (!dir.exists()) {
-            dir.mkdirs();
-        }
-        File file = new File(FILE_PATH);
-        if (file.exists()) {
-            loadFromFile();
-        } else {
-            seedInitialData();
-            saveToFile();
-        }
-    }
+    @Override
+    public void insert(Layanan l) {
+        if (l == null) return;
 
-    private void seedInitialData() {
-        insert(new LayananUmum(generateNextId(), "Konsultasi Umum", 75000.0, "Pemeriksaan dan konsultasi dokter umum", true));
-        insert(new LayananUmum(generateNextId(), "Pemeriksaan Gigi", 120000.0, "Pembersihan karang dan pemeriksaan gigi", true));
-        insert(new LayananSpesialis(generateNextId(), "Konsultasi Penyakit Dalam", 150000.0, "Konsultasi dan pemeriksaan spesialis penyakit dalam", true, 50000.0));
-        insert(new LayananSpesialis(generateNextId(), "Konsultasi Anak Spesialis", 140000.0, "Pemeriksaan tumbuh kembang dan penyakit anak", true, 50000.0));
-        insert(new LayananUmum(generateNextId(), "Suntik Vitamin C", 50000.0, "Injeksi vitamin penambah imun", false));
-    }
+        String sql = "INSERT INTO layanan (id_layanan, nama_layanan, jenis_layanan, tarif, keterangan, status_aktif) "
+                   + "VALUES (COALESCE(?, fn_id('LYN', nextval('seq_layanan'))), ?, ?, ?, ?, ?) "
+                   + "RETURNING id_layanan";
 
-    public synchronized String generateNextId() {
-        counter++;
-        return String.format("LYN-%03d", counter);
-    }
+        try (Connection c = DatabaseConnection.getConnection();
+             PreparedStatement ps = c.prepareStatement(sql)) {
 
-    private void updateCounterFromId(String id) {
-        if (id != null && id.startsWith("LYN-")) {
-            try {
-                int val = Integer.parseInt(id.substring(4));
-                if (val > counter) {
-                    counter = val;
+            String jenis = (l instanceof LayananSpesialis) ? "SPESIALIS" : "UMUM";
+
+            ps.setString(1, (l.getId() != null && !l.getId().isBlank()) ? l.getId() : null);
+            ps.setString(2, l.getNamaLayanan());
+            ps.setString(3, jenis);
+            ps.setDouble(4, l.getTarifDasar());
+            ps.setString(5, l.getKeterangan());
+            ps.setBoolean(6, l.isAktif());
+
+            try (ResultSet rs = ps.executeQuery()) {
+                if (rs.next()) {
+                    l.setId(rs.getString("id_layanan"));
                 }
-            } catch (NumberFormatException ignored) {}
+            }
+        } catch (SQLException e) {
+            throw new RuntimeException("Gagal menambah data layanan: " + PesanDb.untukPengguna(e), e);
         }
     }
 
     @Override
-    public synchronized void insert(Layanan layanan) {
-        if (layanan.getId() == null || layanan.getId().trim().isEmpty()) {
-            layanan.setId(generateNextId());
-        } else {
-            updateCounterFromId(layanan.getId());
+    public void update(Layanan l) {
+        if (l == null || l.getId() == null) return;
+
+        String sql = "UPDATE layanan SET nama_layanan = ?, jenis_layanan = ?, tarif = ?, keterangan = ?, status_aktif = ? "
+                   + "WHERE id_layanan = ?";
+
+        try (Connection c = DatabaseConnection.getConnection();
+             PreparedStatement ps = c.prepareStatement(sql)) {
+
+            String jenis = (l instanceof LayananSpesialis) ? "SPESIALIS" : "UMUM";
+
+            ps.setString(1, l.getNamaLayanan());
+            ps.setString(2, jenis);
+            ps.setDouble(3, l.getTarifDasar());
+            ps.setString(4, l.getKeterangan());
+            ps.setBoolean(5, l.isAktif());
+            ps.setString(6, l.getId());
+
+            ps.executeUpdate();
+        } catch (SQLException e) {
+            throw new RuntimeException("Gagal memperbarui data layanan: " + PesanDb.untukPengguna(e), e);
         }
-        storage.put(layanan.getId(), layanan);
-        saveToFile();
     }
 
     @Override
-    public synchronized void update(Layanan layanan) {
-        if (layanan != null && layanan.getId() != null) {
-            storage.put(layanan.getId(), layanan);
-            saveToFile();
-        }
-    }
-
-    @Override
-    public synchronized void delete(String id) {
-        // Layanan dalam aturan bisnis tidak dihapus permanen melainkan dinonaktifkan
+    public void delete(String id) {
+        // Aturan bisnis: layanan tidak dihapus permanen, melainkan dinonaktifkan
         toggleAktif(id, false);
     }
 
-    public synchronized void toggleAktif(String id, boolean aktif) {
-        Layanan layanan = storage.get(id);
-        if (layanan != null) {
-            layanan.setAktif(aktif);
-            saveToFile();
+    public void toggleAktif(String id, boolean aktif) {
+        String sql = "UPDATE layanan SET status_aktif = ? WHERE id_layanan = ?";
+        try (Connection c = DatabaseConnection.getConnection();
+             PreparedStatement ps = c.prepareStatement(sql)) {
+            ps.setBoolean(1, aktif);
+            ps.setString(2, id);
+            ps.executeUpdate();
+        } catch (SQLException e) {
+            throw new RuntimeException("Gagal mengubah status aktif layanan: " + PesanDb.untukPengguna(e), e);
         }
     }
 
     @Override
-    public synchronized Optional<Layanan> findById(String id) {
-        return Optional.ofNullable(storage.get(id));
+    public Optional<Layanan> findById(String id) {
+        if (id == null) return Optional.empty();
+        String sql = "SELECT * FROM layanan WHERE id_layanan = ?";
+        try (Connection c = DatabaseConnection.getConnection();
+             PreparedStatement ps = c.prepareStatement(sql)) {
+            ps.setString(1, id);
+            try (ResultSet rs = ps.executeQuery()) {
+                if (rs.next()) {
+                    return Optional.of(mapResultSetToLayanan(rs));
+                }
+            }
+        } catch (SQLException e) {
+            System.err.println("Gagal mencari layanan by ID: " + e.getMessage());
+        }
+        return Optional.empty();
     }
 
     @Override
-    public synchronized List<Layanan> findAll() {
-        return new ArrayList<>(storage.values());
+    public List<Layanan> findAll() {
+        List<Layanan> list = new ArrayList<>();
+        String sql = "SELECT * FROM layanan ORDER BY id_layanan";
+        try (Connection c = DatabaseConnection.getConnection();
+             Statement st = c.createStatement();
+             ResultSet rs = st.executeQuery(sql)) {
+            while (rs.next()) {
+                list.add(mapResultSetToLayanan(rs));
+            }
+        } catch (SQLException e) {
+            System.err.println("Gagal memuat semua layanan: " + e.getMessage());
+        }
+        return list;
     }
 
-    public synchronized List<Layanan> findActive() {
-        return storage.values().stream()
-                .filter(Layanan::isAktif)
-                .collect(Collectors.toList());
+    public List<Layanan> findActive() {
+        List<Layanan> list = new ArrayList<>();
+        String sql = "SELECT * FROM layanan WHERE status_aktif = TRUE ORDER BY id_layanan";
+        try (Connection c = DatabaseConnection.getConnection();
+             Statement st = c.createStatement();
+             ResultSet rs = st.executeQuery(sql)) {
+            while (rs.next()) {
+                list.add(mapResultSetToLayanan(rs));
+            }
+        } catch (SQLException e) {
+            System.err.println("Gagal memuat layanan aktif: " + e.getMessage());
+        }
+        return list;
     }
 
-    public synchronized List<Layanan> search(String keyword) {
+    public List<Layanan> search(String keyword) {
         if (keyword == null || keyword.trim().isEmpty()) {
             return findAll();
         }
-        String q = keyword.trim().toLowerCase();
-        return storage.values().stream()
-                .filter(l -> (l.getNamaLayanan() != null && l.getNamaLayanan().toLowerCase().contains(q)) ||
-                             (l.getId() != null && l.getId().toLowerCase().contains(q)) ||
-                             (l.getJenisLayanan() != null && l.getJenisLayanan().toLowerCase().contains(q)))
-                .collect(Collectors.toList());
-    }
-
-    private synchronized void saveToFile() {
-        try (PrintWriter writer = new PrintWriter(new FileWriter(FILE_PATH))) {
-            for (Layanan l : storage.values()) {
-                // Format: id|jenis|namaLayanan|tarifDasar|keterangan|aktif|extraFee
-                double extraFee = 0.0;
-                if (l instanceof LayananSpesialis) {
-                    extraFee = ((LayananSpesialis) l).getBiayaKonsultasiSpesialis();
-                }
-                String line = String.join("|",
-                        escape(l.getId()),
-                        escape(l.getJenisLayanan()),
-                        escape(l.getNamaLayanan()),
-                        String.valueOf(l.getTarifDasar()),
-                        escape(l.getKeterangan()),
-                        String.valueOf(l.isAktif()),
-                        String.valueOf(extraFee)
-                );
-                writer.println(line);
-            }
-        } catch (IOException e) {
-            System.err.println("Gagal menyimpan data layanan ke file: " + e.getMessage());
-        }
-    }
-
-    private synchronized void loadFromFile() {
-        storage.clear();
-        try (BufferedReader reader = new BufferedReader(new FileReader(FILE_PATH))) {
-            String line;
-            while ((line = reader.readLine()) != null) {
-                if (line.trim().isEmpty()) continue;
-                String[] parts = line.split("\\|", -1);
-                if (parts.length >= 6) {
-                    String id = unescape(parts[0]);
-                    String jenis = unescape(parts[1]);
-                    String nama = unescape(parts[2]);
-                    double tarif = Double.parseDouble(parts[3]);
-                    String ket = unescape(parts[4]);
-                    boolean aktif = Boolean.parseBoolean(parts[5]);
-                    double extra = (parts.length >= 7 && !parts[6].isEmpty()) ? Double.parseDouble(parts[6]) : 50000.0;
-
-                    Layanan l;
-                    if ("Spesialis".equalsIgnoreCase(jenis)) {
-                        l = new LayananSpesialis(id, nama, tarif, ket, aktif, extra);
-                    } else {
-                        l = new LayananUmum(id, nama, tarif, ket, aktif);
-                    }
-                    storage.put(id, l);
-                    updateCounterFromId(id);
+        String q = "%" + keyword.trim().toLowerCase() + "%";
+        String sql = "SELECT * FROM layanan WHERE LOWER(nama_layanan) LIKE ? OR LOWER(id_layanan) LIKE ? ORDER BY id_layanan";
+        List<Layanan> list = new ArrayList<>();
+        try (Connection c = DatabaseConnection.getConnection();
+             PreparedStatement ps = c.prepareStatement(sql)) {
+            ps.setString(1, q);
+            ps.setString(2, q);
+            try (ResultSet rs = ps.executeQuery()) {
+                while (rs.next()) {
+                    list.add(mapResultSetToLayanan(rs));
                 }
             }
-        } catch (Exception e) {
-            System.err.println("Gagal memuat data layanan dari file: " + e.getMessage());
+        } catch (SQLException e) {
+            System.err.println("Gagal mencari layanan: " + e.getMessage());
         }
+        return list;
     }
 
-    private String escape(String val) {
-        if (val == null) return "";
-        return val.replace("\n", "\\n").replace("|", "/");
-    }
+    private Layanan mapResultSetToLayanan(ResultSet rs) throws SQLException {
+        String id = rs.getString("id_layanan");
+        String nama = rs.getString("nama_layanan");
+        String jenis = rs.getString("jenis_layanan");
+        double tarif = rs.getDouble("tarif");
+        String ket = rs.getString("keterangan");
+        boolean aktif = rs.getBoolean("status_aktif");
 
-    private String unescape(String val) {
-        if (val == null) return "";
-        return val.replace("\\n", "\n");
+        if ("SPESIALIS".equalsIgnoreCase(jenis)) {
+            return new LayananSpesialis(id, nama, tarif, ket, aktif);
+        } else {
+            return new LayananUmum(id, nama, tarif, ket, aktif);
+        }
     }
 }
-

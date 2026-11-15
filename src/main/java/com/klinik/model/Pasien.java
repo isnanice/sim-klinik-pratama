@@ -1,13 +1,12 @@
 package com.klinik.model;
 
-import com.klinik.exception.DataTidakValidException;
-
 import java.time.LocalDate;
 import java.time.format.DateTimeFormatter;
 
 /**
  * Entitas Pasien dalam Sistem Informasi Manajemen Klinik Pratama.
  * Mewarisi Orang dan mengimplementasikan DapatDicetak.
+ * Terintegrasi dengan tabel PostgreSQL 'pasien'.
  */
 public class Pasien extends Orang implements DapatDicetak {
     private String nik;
@@ -19,6 +18,7 @@ public class Pasien extends Orang implements DapatDicetak {
         super();
         this.nik = "";
         this.tanggalRegistrasi = LocalDate.now();
+        this.aktif = true;
     }
 
     public Pasien(String id, String nama, JenisKelamin jenisKelamin, LocalDate tanggalLahir,
@@ -39,29 +39,15 @@ public class Pasien extends Orang implements DapatDicetak {
         return nik;
     }
 
-    public void setNik(String nik) throws DataTidakValidException {
-        if (nik == null || nik.trim().isEmpty()) {
-            this.nik = "";
-            return;
-        }
-        String cleanNik = nik.trim();
-        if (!cleanNik.matches("^[0-9]{16}$")) {
-            throw new DataTidakValidException("NIK", "NIK harus terdiri dari 16 digit angka.");
-        }
-        this.nik = cleanNik;
+    public void setNik(String nik) {
+        this.nik = nik != null ? nik.trim() : "";
     }
 
     public LocalDate getTanggalLahir() {
         return tanggalLahir;
     }
 
-    public void setTanggalLahir(LocalDate tanggalLahir) throws DataTidakValidException {
-        if (tanggalLahir == null) {
-            throw new DataTidakValidException("Tanggal Lahir", "Tanggal lahir wajib diisi.");
-        }
-        if (tanggalLahir.isAfter(LocalDate.now())) {
-            throw new DataTidakValidException("Tanggal Lahir", "Tanggal lahir tidak boleh di masa depan.");
-        }
+    public void setTanggalLahir(LocalDate tanggalLahir) {
         this.tanggalLahir = tanggalLahir;
     }
 
@@ -69,27 +55,16 @@ public class Pasien extends Orang implements DapatDicetak {
         return noBpjs;
     }
 
-    public void setNoBpjs(String noBpjs) throws DataTidakValidException {
-        if (noBpjs == null || noBpjs.trim().isEmpty()) {
-            this.noBpjs = "";
-            return;
-        }
-        String cleanBpjs = noBpjs.trim();
-        if (!cleanBpjs.matches("^[0-9]{13}$")) {
-            throw new DataTidakValidException("No. BPJS", "Nomor BPJS harus terdiri dari 13 digit angka (atau kosongkan jika tidak ada).");
-        }
-        this.noBpjs = cleanBpjs;
+    public void setNoBpjs(String noBpjs) {
+        this.noBpjs = noBpjs != null ? noBpjs.trim() : "";
     }
 
     public LocalDate getTanggalRegistrasi() {
         return tanggalRegistrasi;
     }
 
-    public void setTanggalRegistrasi(LocalDate tanggalRegistrasi) throws DataTidakValidException {
-        if (tanggalRegistrasi == null) {
-            throw new DataTidakValidException("Tanggal Registrasi", "Tanggal registrasi wajib diisi.");
-        }
-        this.tanggalRegistrasi = tanggalRegistrasi;
+    public void setTanggalRegistrasi(LocalDate tanggalRegistrasi) {
+        this.tanggalRegistrasi = tanggalRegistrasi != null ? tanggalRegistrasi : LocalDate.now();
     }
 
     @Override
