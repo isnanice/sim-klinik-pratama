@@ -7,8 +7,11 @@ import com.klinik.dao.PasienDAO;
 import com.klinik.dao.PemeriksaanDAO;
 import com.klinik.dao.PetugasDAO;
 import com.klinik.dao.SuratDAO;
+import com.klinik.exception.DatabaseException;
+import com.klinik.exception.KlinikException;
 import com.klinik.view.LoginView;
 
+import javax.swing.JOptionPane;
 import javax.swing.SwingUtilities;
 import javax.swing.UIManager;
 
@@ -23,8 +26,22 @@ public class App {
         } catch (Exception ignored) {
         }
 
+        // Galat database yang lolos dari event handler ditampilkan sebagai dialog, bukan membuat aplikasi macet.
+        Thread.setDefaultUncaughtExceptionHandler((thread, galat) -> {
+            Throwable t = galat;
+            while (t.getCause() != null && !(t instanceof KlinikException)) {
+                t = t.getCause();
+            }
+            final String pesan = t.getMessage() != null ? t.getMessage() : t.toString();
+            final boolean database = t instanceof DatabaseException;
+            SwingUtilities.invokeLater(() -> JOptionPane.showMessageDialog(null, pesan,
+                    database ? "Kesalahan Database" : "Terjadi Kesalahan",
+                    JOptionPane.ERROR_MESSAGE));
+            galat.printStackTrace();
+        });
+
         SwingUtilities.invokeLater(() -> {
-            // Inisialisasi DAO dengan persistensi file otomatis
+            // DAO memakai PostgreSQL lewat JDBC (konfigurasi di db.properties)
             PetugasDAO petugasDAO = new PetugasDAO();
             PasienDAO pasienDAO = new PasienDAO();
             DokterDAO dokterDAO = new DokterDAO();

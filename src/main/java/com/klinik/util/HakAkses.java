@@ -41,6 +41,13 @@ public final class HakAkses {
     public static final String SERAHKAN_SURAT = "SERAHKAN_SURAT";
     public static final String KELOLA_PEMBAYARAN = "KELOLA_PEMBAYARAN";
 
+    // Izin per tahap alur pelayanan (PRD bagian 4, FR-18 sampai FR-24)
+    public static final String DAFTAR_KUNJUNGAN = "DAFTAR_KUNJUNGAN";     // pendaftaran kunjungan (FR-18)
+    public static final String ISI_TTV = "ISI_TTV";                       // pemeriksaan awal (FR-19)
+    public static final String PERIKSA_DOKTER = "PERIKSA_DOKTER";         // pemeriksaan dokter (FR-20)
+    public static final String ISI_FARMASI = "ISI_FARMASI";               // farmasi (FR-21)
+    public static final String LIHAT_REKAM_MEDIS = "LIHAT_REKAM_MEDIS";   // riwayat rekam medis (FR-24)
+
     private static final Map<Role, Set<String>> PERMISSIONS = new EnumMap<>(Role.class);
 
     static {
@@ -54,7 +61,8 @@ public final class HakAkses {
                 LIHAT_LAYANAN, KELOLA_LAYANAN,
                 KELOLA_ANTREAN, KELOLA_PEMERIKSAAN, KELOLA_REKAM_MEDIS,
                 LIHAT_SURAT, BUAT_SURAT, SERAHKAN_SURAT,
-                KELOLA_PEMBAYARAN
+                KELOLA_PEMBAYARAN,
+                DAFTAR_KUNJUNGAN, ISI_TTV, PERIKSA_DOKTER, ISI_FARMASI, LIHAT_REKAM_MEDIS
         );
         PERMISSIONS.put(Role.ADMIN, Collections.unmodifiableSet(adminPerms));
 
@@ -62,25 +70,27 @@ public final class HakAkses {
         Set<String> petugasPerms = new HashSet<>();
         Collections.addAll(petugasPerms,
                 MENU_BERANDA, MENU_PASIEN, MENU_DOKTER, MENU_LAYANAN,
-                MENU_ANTREAN, MENU_PEMERIKSAAN, MENU_SURAT, MENU_PEMBAYARAN,
+                MENU_ANTREAN, MENU_PEMERIKSAAN, MENU_REKAM_MEDIS, MENU_SURAT, MENU_PEMBAYARAN,
                 LIHAT_PASIEN, KELOLA_PASIEN,
                 LIHAT_DOKTER,
                 LIHAT_LAYANAN,
                 KELOLA_ANTREAN, KELOLA_PEMERIKSAAN,
                 LIHAT_SURAT, SERAHKAN_SURAT,
-                KELOLA_PEMBAYARAN
+                KELOLA_PEMBAYARAN,
+                DAFTAR_KUNJUNGAN, ISI_TTV, ISI_FARMASI, LIHAT_REKAM_MEDIS
         );
         PERMISSIONS.put(Role.PETUGAS, Collections.unmodifiableSet(petugasPerms));
 
         // Hak Akses DOKTER: Lihat pasien, lihat antrean, pemeriksaan medis, rekam medis, dan buat surat izin/rujukan
         Set<String> dokterPerms = new HashSet<>();
         Collections.addAll(dokterPerms,
-                MENU_BERANDA, MENU_PASIEN, MENU_ANTREAN, MENU_PEMERIKSAAN, MENU_REKAM_MEDIS, MENU_SURAT,
+                MENU_BERANDA, MENU_PASIEN, MENU_ANTREAN, MENU_REKAM_MEDIS, MENU_SURAT,
                 LIHAT_PASIEN,
                 LIHAT_DOKTER,
                 LIHAT_LAYANAN,
-                KELOLA_ANTREAN, KELOLA_PEMERIKSAAN, KELOLA_REKAM_MEDIS,
-                LIHAT_SURAT, BUAT_SURAT
+                KELOLA_ANTREAN, KELOLA_REKAM_MEDIS,
+                LIHAT_SURAT, BUAT_SURAT,
+                PERIKSA_DOKTER, LIHAT_REKAM_MEDIS
         );
         PERMISSIONS.put(Role.DOKTER, Collections.unmodifiableSet(dokterPerms));
     }

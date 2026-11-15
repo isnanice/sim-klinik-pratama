@@ -49,6 +49,11 @@ public class LayananSpesialis extends Layanan {
     }
 
     @Override
+    public String rincianTarif() {
+        return super.rincianTarif() + " + biaya spesialis " + formatRupiah(biayaKonsultasiSpesialis);
+    }
+
+    @Override
     public String cetakRingkasan() {
         StringBuilder sb = new StringBuilder(super.cetakRingkasan());
         sb.append(String.format("%-18s: %s%n", "Biaya Spesialis", formatRupiah(biayaKonsultasiSpesialis)));

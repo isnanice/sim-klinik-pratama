@@ -1,21 +1,15 @@
 package com.klinik.view;
 
-import com.klinik.controller.DokterController;
-import com.klinik.controller.LayananController;
-import com.klinik.controller.LoginController;
-import com.klinik.controller.PasienController;
-import com.klinik.controller.SuratController;
-import com.klinik.dao.DokterDAO;
-import com.klinik.dao.LayananDAO;
-import com.klinik.dao.PasienDAO;
-import com.klinik.dao.PemeriksaanDAO;
-import com.klinik.dao.PetugasDAO;
-import com.klinik.dao.SuratDAO;
-import com.klinik.model.Petugas;
-import com.klinik.model.Role;
-import com.klinik.util.HakAkses;
-import com.klinik.util.SesiPengguna;
-import com.klinik.view.theme.UITheme;
+import java.awt.BorderLayout;
+import java.awt.CardLayout;
+import java.awt.Color;
+import java.awt.Component;
+import java.awt.Dimension;
+import java.awt.FlowLayout;
+import java.awt.Font;
+import java.awt.GridBagLayout;
+import java.time.LocalDate;
+import java.time.format.DateTimeFormatter;
 
 import javax.swing.BorderFactory;
 import javax.swing.Box;
@@ -31,16 +25,21 @@ import javax.swing.JPanel;
 import javax.swing.border.CompoundBorder;
 import javax.swing.border.EmptyBorder;
 import javax.swing.border.LineBorder;
-import java.awt.BorderLayout;
-import java.awt.CardLayout;
-import java.awt.Color;
-import java.awt.Component;
-import java.awt.Dimension;
-import java.awt.FlowLayout;
-import java.awt.Font;
-import java.awt.GridBagLayout;
-import java.time.LocalDate;
-import java.time.format.DateTimeFormatter;
+
+import com.klinik.controller.DokterController;
+import com.klinik.controller.LayananController;
+import com.klinik.controller.LoginController;
+import com.klinik.controller.PasienController;
+import com.klinik.controller.PembayaranController;
+import com.klinik.controller.PemeriksaanController;
+import com.klinik.controller.RekamMedisController;
+import com.klinik.controller.SuratController;
+import com.klinik.dao.PetugasDAO;
+import com.klinik.model.Petugas;
+import com.klinik.model.Role;
+import com.klinik.util.HakAkses;
+import com.klinik.util.SesiPengguna;
+import com.klinik.view.theme.UITheme;
 
 /**
  * Jendela Utama Aplikasi (MainFrame).
@@ -55,7 +54,9 @@ public class MainFrame extends JFrame {
     private final LayananController layananController;
     private final PasienController pasienController;
     private final SuratController suratController;
-    private final PemeriksaanDAO pemeriksaanDAO;
+    private final PemeriksaanController pemeriksaanController;
+    private final RekamMedisController rekamMedisController;
+    private final PembayaranController pembayaranController;
     private final LoginController loginController;
 
     private DokterView dokterView;
@@ -63,34 +64,30 @@ public class MainFrame extends JFrame {
     private PasienView pasienView;
     private AntreanView antreanView;
     private SuratView suratView;
+    private PemeriksaanView pemeriksaanView;
+    private RekamMedisView rekamMedisView;
+    private PembayaranView pembayaranView;
     private JPanel welcomePanel;
 
     private JLabel lblStatusUser;
     private Role currentRole;
     private String currentUsername;
 
-    public MainFrame(DokterController dokterController, LayananController layananController, PasienController pasienController) {
-        this(
-                dokterController,
-                layananController,
-                pasienController,
-                new SuratController(new SuratDAO(), new PemeriksaanDAO(new PasienDAO(), new DokterDAO(), new LayananDAO())),
-                new PemeriksaanDAO(new PasienDAO(), new DokterDAO(), new LayananDAO()),
-                new LoginController(new PetugasDAO())
-        );
-    }
-
     public MainFrame(DokterController dokterController,
                      LayananController layananController,
                      PasienController pasienController,
                      SuratController suratController,
-                     PemeriksaanDAO pemeriksaanDAO,
+                     PemeriksaanController pemeriksaanController,
+                     RekamMedisController rekamMedisController,
+                     PembayaranController pembayaranController,
                      LoginController loginController) {
         this.dokterController = dokterController;
         this.layananController = layananController;
         this.pasienController = pasienController;
         this.suratController = suratController;
-        this.pemeriksaanDAO = pemeriksaanDAO;
+        this.pemeriksaanController = pemeriksaanController;
+        this.rekamMedisController = rekamMedisController;
+        this.pembayaranController = pembayaranController;
         this.loginController = loginController != null ? loginController : new LoginController(new PetugasDAO());
 
         syncFromSession();
@@ -128,7 +125,10 @@ public class MainFrame extends JFrame {
         dokterView = new DokterView(dokterController);
         layananView = new LayananView(layananController);
         pasienView = new PasienView(pasienController);
-        antreanView = new AntreanView(pemeriksaanDAO);
+        antreanView = new AntreanView(pemeriksaanController);
+        pemeriksaanView = new PemeriksaanView(pemeriksaanController);
+        rekamMedisView = new RekamMedisView(rekamMedisController);
+        pembayaranView = new PembayaranView(pembayaranController);
         suratView = new SuratView(suratController);
         welcomePanel = createWelcomePanel();
 
@@ -142,6 +142,9 @@ public class MainFrame extends JFrame {
         mainContainer.add(layananView, "LAYANAN");
         mainContainer.add(antreanView, "ANTREAN");
         mainContainer.add(suratView, "SURAT");
+        mainContainer.add(pemeriksaanView, "PEMERIKSAAN");
+        mainContainer.add(rekamMedisView, "REKAM_MEDIS");
+        mainContainer.add(pembayaranView, "PEMBAYARAN");
 
         // Setup Menu Bar dengan visibilitas HakAkses
         setJMenuBar(createAppMenuBar());
@@ -188,6 +191,10 @@ public class MainFrame extends JFrame {
         // 3. Pelayanan & Surat
         JMenu menuTransaksi = createStyledMenu("Pelayanan & Surat");
 
+        JMenuItem miPemeriksaan = new JMenuItem("Pendaftaran & Pemeriksaan");
+        miPemeriksaan.setVisible(HakAkses.memilikiAkses(currentRole, HakAkses.MENU_PEMERIKSAAN));
+        miPemeriksaan.addActionListener(e -> tampilkan("PEMERIKSAAN"));
+
         JMenuItem miAntrean = new JMenuItem("Antrean Pemeriksaan");
         miAntrean.setVisible(HakAkses.memilikiAkses(currentRole, HakAkses.MENU_ANTREAN));
         miAntrean.addActionListener(e -> tampilkan("ANTREAN"));
@@ -198,23 +205,20 @@ public class MainFrame extends JFrame {
 
         JMenuItem miRekamMedis = new JMenuItem("Rekam Medis");
         miRekamMedis.setVisible(HakAkses.memilikiAkses(currentRole, HakAkses.MENU_REKAM_MEDIS));
-        miRekamMedis.addActionListener(e -> JOptionPane.showMessageDialog(this,
-                "Rekam Medis dikelola oleh RekamMedisController & terintegrasi dalam alur pelayanan.",
-                "Info Rekam Medis", JOptionPane.INFORMATION_MESSAGE));
+        miRekamMedis.addActionListener(e -> tampilkan("REKAM_MEDIS"));
 
         JMenuItem miPembayaran = new JMenuItem("Pembayaran");
         miPembayaran.setVisible(HakAkses.memilikiAkses(currentRole, HakAkses.MENU_PEMBAYARAN));
-        miPembayaran.addActionListener(e -> JOptionPane.showMessageDialog(this,
-                "Pembayaran dikelola oleh PembayaranController dengan polimorfisme tarif Layanan.",
-                "Info Pembayaran", JOptionPane.INFORMATION_MESSAGE));
+        miPembayaran.addActionListener(e -> tampilkan("PEMBAYARAN"));
 
+        menuTransaksi.add(miPemeriksaan);
         menuTransaksi.add(miAntrean);
         menuTransaksi.add(miSurat);
         menuTransaksi.addSeparator();
         menuTransaksi.add(miRekamMedis);
         menuTransaksi.add(miPembayaran);
         menuTransaksi.setVisible(
-                miAntrean.isVisible() || miSurat.isVisible() || miRekamMedis.isVisible() || miPembayaran.isVisible()
+                miPemeriksaan.isVisible() || miAntrean.isVisible() || miSurat.isVisible() || miRekamMedis.isVisible() || miPembayaran.isVisible()
         );
 
         // 4. Akun & Sesi
@@ -356,6 +360,14 @@ public class MainFrame extends JFrame {
             antreanView.refreshTable();
         } else if ("SURAT".equals(namaKartu)) {
             suratView.refreshViewForCurrentSession();
+        } else if ("PEMERIKSAAN".equals(namaKartu)) {
+            // data berubah dari layar lain, jadi muat ulang tiap dibuka
+            pemeriksaanView.muatPilihan();
+            pemeriksaanView.muatTabel();
+        } else if ("REKAM_MEDIS".equals(namaKartu)) {
+            rekamMedisView.segarkan();
+        } else if ("PEMBAYARAN".equals(namaKartu)) {
+            pembayaranView.segarkan();
         }
         cardLayout.show(mainContainer, namaKartu);
     }
