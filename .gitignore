@@ -1,0 +1,5 @@
+# Maven build output
+target/
+
+# GitHub modernization temporary files
+.github/modernize/
