@@ -1,6 +1,15 @@
+# Maven build output
+target/
+
+# GitHub modernization temporary files
+.github/modernize/
+
+# IDE files
 .classpath
 .project
 .settings/
 .vscode/
-target/
+
+# Database credentials
 db.properties
+config/db.properties

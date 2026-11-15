@@ -3,7 +3,7 @@ package com.klinik.exception;
 /**
  * Base Exception untuk Sistem Informasi Klinik Pratama.
  */
-public class KlinikException extends Exception {
+public class KlinikException extends RuntimeException {
     public KlinikException(String message) {
         super(message);
     }
