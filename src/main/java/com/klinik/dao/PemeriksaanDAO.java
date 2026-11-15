@@ -1,14 +1,29 @@
 package com.klinik.dao;
 
-import com.klinik.model.*;
+import com.klinik.exception.DataNotFoundException;
+import com.klinik.exception.DataTidakValidException;
+import com.klinik.model.Dokter;
+import com.klinik.model.Layanan;
+import com.klinik.model.Pasien;
+import com.klinik.model.Pemeriksaan;
+import com.klinik.model.StatusPemeriksaan;
 
-import java.io.*;
+import java.io.BufferedReader;
+import java.io.File;
+import java.io.FileReader;
+import java.io.FileWriter;
+import java.io.IOException;
+import java.io.PrintWriter;
 import java.time.LocalDate;
-import java.util.*;
+import java.util.ArrayList;
+import java.util.LinkedHashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.Optional;
 import java.util.stream.Collectors;
 
 /**
- * Data Access Object untuk entitas Pemeriksaan dengan persistensi file teks/CSV.
+ * Data Access Object untuk entitas Pemeriksaan dengan persistensi file teks/CSV (data/pemeriksaan.txt).
  */
 public class PemeriksaanDAO implements GenericDAO<Pemeriksaan, String> {
     private static final String DATA_DIR = "data";
@@ -32,6 +47,7 @@ public class PemeriksaanDAO implements GenericDAO<Pemeriksaan, String> {
         File file = new File(FILE_PATH);
         if (file.exists()) {
             loadFromFile();
+            ensureSampleActiveVisitsForDokter();
         } else {
             seedInitialData();
             saveToFile();
@@ -45,13 +61,43 @@ public class PemeriksaanDAO implements GenericDAO<Pemeriksaan, String> {
 
         if (!pasiens.isEmpty() && !dokters.isEmpty() && !layanans.isEmpty()) {
             Pemeriksaan p1 = new Pemeriksaan(generateNextId(), "P-001", pasiens.get(0), dokters.get(0), layanans.get(0),
-                    LocalDate.now(), "Demam dan batuk pilek", "petugas01", StatusPemeriksaan.SELESAI);
+                    LocalDate.now(), "Demam dan batuk pilek", "petugas01", StatusPemeriksaan.SELESAI, 1, "");
             insert(p1);
 
             if (pasiens.size() > 1 && dokters.size() > 1 && layanans.size() > 2) {
                 Pemeriksaan p2 = new Pemeriksaan(generateNextId(), "P-002", pasiens.get(1), dokters.get(1), layanans.get(2),
-                        LocalDate.now(), "Nyeri lambung kronis", "petugas01", StatusPemeriksaan.MENUNGGU_DOKTER);
+                        LocalDate.now(), "Nyeri lambung kronis", "petugas01", StatusPemeriksaan.DIPERIKSA, 1, "");
                 insert(p2);
+            }
+
+            if (pasiens.size() > 2) {
+                Pemeriksaan p3 = new Pemeriksaan(generateNextId(), "P-003", pasiens.get(2), dokters.get(0), layanans.get(0),
+                        LocalDate.now(), "Pusing dan lemas sejak 2 hari", "petugas01", StatusPemeriksaan.TTV_SELESAI, 1, "");
+                insert(p3);
+            }
+        }
+    }
+
+    /**
+     * Memastikan terdapat minimal satu pemeriksaan berstatus TTV_SELESAI / DIPERIKSA untuk DKT-001
+     * agar fitur pembuatan surat oleh dokter01 (DKT-001) dan tampilan antrean dapat langsung diuji.
+     */
+    private void ensureSampleActiveVisitsForDokter() {
+        boolean hasEligibleForDkt001 = storage.values().stream()
+                .anyMatch(p -> p.getDokter() != null
+                        && "DKT-001".equalsIgnoreCase(p.getDokter().getId())
+                        && (p.getStatus() == StatusPemeriksaan.TTV_SELESAI || p.getStatus() == StatusPemeriksaan.DIPERIKSA));
+        if (!hasEligibleForDkt001) {
+            List<Pasien> pasiens = pasienDAO.findAll();
+            Optional<Dokter> dkt001 = dokterDAO.findById("DKT-001");
+            List<Layanan> layanans = layananDAO.findAll();
+            if (!pasiens.isEmpty() && dkt001.isPresent() && !layanans.isEmpty()) {
+                Pasien targetPasien = pasiens.size() > 2 ? pasiens.get(2) : pasiens.get(0);
+                Pemeriksaan p = new Pemeriksaan(generateNextId(), "P-004", targetPasien, dkt001.get(), layanans.get(0),
+                        LocalDate.now(), "Demam tinggi dan radang tenggorokan", "petugas01",
+                        StatusPemeriksaan.TTV_SELESAI, 1, "");
+                storage.put(p.getId(), p);
+                saveToFile();
             }
         }
     }
@@ -123,6 +169,61 @@ public class PemeriksaanDAO implements GenericDAO<Pemeriksaan, String> {
                 .collect(Collectors.toList());
     }
 
+    public synchronized List<Pemeriksaan> findByDokterId(String idDokter) {
+        if (idDokter == null || idDokter.trim().isEmpty()) {
+            return new ArrayList<>();
+        }
+        return storage.values().stream()
+                .filter(p -> p.getDokter() != null && idDokter.trim().equalsIgnoreCase(p.getDokter().getId()))
+                .collect(Collectors.toList());
+    }
+
+    /**
+     * BR-14: Memanggil pasien dalam antrean dan menambah hitungan jumlahPanggilan.
+     */
+    public synchronized Pemeriksaan panggilAntrean(String idPemeriksaan)
+            throws DataNotFoundException, DataTidakValidException {
+        Pemeriksaan p = findById(idPemeriksaan)
+                .orElseThrow(() -> new DataNotFoundException("Data pemeriksaan " + idPemeriksaan + " tidak ditemukan."));
+        if (p.getStatus() == StatusPemeriksaan.SELESAI || p.getStatus() == StatusPemeriksaan.DIBATALKAN) {
+            throw new DataTidakValidException("Status Pemeriksaan",
+                    "Antrean dengan status " + p.getStatus().getLabel() + " tidak dapat dipanggil lagi.");
+        }
+        p.tambahPanggilan();
+        saveToFile();
+        return p;
+    }
+
+    /**
+     * BR-14 & BR-15: Membatalkan antrean pemeriksaan hanya jika jumlahPanggilan >= 3 dan alasan pembatalan diisi.
+     */
+    public synchronized Pemeriksaan batalkanAntrean(String idPemeriksaan, String alasanBatal)
+            throws DataNotFoundException, DataTidakValidException {
+        Pemeriksaan p = findById(idPemeriksaan)
+                .orElseThrow(() -> new DataNotFoundException("Data pemeriksaan " + idPemeriksaan + " tidak ditemukan."));
+        if (p.getStatus() == StatusPemeriksaan.SELESAI) {
+            throw new DataTidakValidException("Status Pemeriksaan",
+                    "Pemeriksaan yang sudah SELESAI tidak dapat dibatalkan.");
+        }
+        if (p.getStatus() == StatusPemeriksaan.DIBATALKAN) {
+            throw new DataTidakValidException("Status Pemeriksaan",
+                    "Pemeriksaan ini sudah berstatus DIBATALKAN.");
+        }
+        if (p.getJumlahPanggilan() < 3) {
+            throw new DataTidakValidException("Jumlah Panggilan",
+                    "Antrean belum dapat dibatalkan. Pasien harus dipanggil minimal 3 kali terlebih dahulu (saat ini: "
+                            + p.getJumlahPanggilan() + " kali).");
+        }
+        if (alasanBatal == null || alasanBatal.trim().isEmpty()) {
+            throw new DataTidakValidException("Alasan Pembatalan",
+                    "Alasan pembatalan wajib diisi untuk membatalkan antrean.");
+        }
+        p.setAlasanBatal(alasanBatal.trim());
+        p.setStatus(StatusPemeriksaan.DIBATALKAN);
+        saveToFile();
+        return p;
+    }
+
     private synchronized void saveToFile() {
         try (PrintWriter writer = new PrintWriter(new FileWriter(FILE_PATH))) {
             for (Pemeriksaan p : storage.values()) {
@@ -135,7 +236,9 @@ public class PemeriksaanDAO implements GenericDAO<Pemeriksaan, String> {
                         p.getTanggalPemeriksaan() != null ? p.getTanggalPemeriksaan().toString() : "",
                         p.getKeluhanAwal() != null ? p.getKeluhanAwal().replace("\n", "\\n").replace("|", "/") : "",
                         p.getNamaPetugas() != null ? p.getNamaPetugas() : "",
-                        p.getStatus() != null ? p.getStatus().name() : ""
+                        p.getStatus() != null ? p.getStatus().name() : "",
+                        String.valueOf(p.getJumlahPanggilan()),
+                        p.getAlasanBatal() != null ? p.getAlasanBatal().replace("\n", "\\n").replace("|", "/") : ""
                 );
                 writer.println(line);
             }
@@ -161,12 +264,19 @@ public class PemeriksaanDAO implements GenericDAO<Pemeriksaan, String> {
                     String keluhan = parts[6].replace("\\n", "\n");
                     String petugas = parts[7];
                     StatusPemeriksaan status = StatusPemeriksaan.fromString(parts[8]);
+                    int jmlPanggilan = 0;
+                    if (parts.length >= 10 && !parts[9].trim().isEmpty()) {
+                        try {
+                            jmlPanggilan = Integer.parseInt(parts[9].trim());
+                        } catch (NumberFormatException ignored) {}
+                    }
+                    String alasanBatal = parts.length >= 11 ? parts[10].replace("\\n", "\n") : "";
 
                     Pasien pasien = pasienDAO.findById(idPasien).orElse(null);
                     Dokter dokter = dokterDAO.findById(idDokter).orElse(null);
                     Layanan layanan = layananDAO.findById(idLayanan).orElse(null);
 
-                    Pemeriksaan p = new Pemeriksaan(id, noAntrean, pasien, dokter, layanan, tgl, keluhan, petugas, status);
+                    Pemeriksaan p = new Pemeriksaan(id, noAntrean, pasien, dokter, layanan, tgl, keluhan, petugas, status, jmlPanggilan, alasanBatal);
                     storage.put(id, p);
                     updateCounterFromId(id);
                 }
@@ -176,4 +286,3 @@ public class PemeriksaanDAO implements GenericDAO<Pemeriksaan, String> {
         }
     }
 }
-
