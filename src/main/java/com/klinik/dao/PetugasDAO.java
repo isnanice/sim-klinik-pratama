@@ -43,8 +43,40 @@ public class PetugasDAO implements GenericDAO<Petugas, String> {
         File file = new File(FILE_PATH);
         if (file.exists()) {
             loadFromFile();
+            ensureDefaultAccounts();
         } else {
             seedInitialData();
+            saveToFile();
+        }
+    }
+
+    private void ensureDefaultAccounts() {
+        boolean changed = false;
+        if (!cariByUsername("admin").isPresent()) {
+            insert(new Petugas(generateNextId(), "Siti Rahma", JenisKelamin.PEREMPUAN,
+                    "Jl. Kaliurang Km 5, Sleman", "081234567801", true,
+                    "admin", PasswordUtil.hashPassword("admin123"), Role.ADMIN, ""));
+            changed = true;
+        }
+        if (!cariByUsername("petugas01").isPresent()) {
+            insert(new Petugas(generateNextId(), "Rudi Hartono", JenisKelamin.LAKI_LAKI,
+                    "Jl. Gejayan No. 15, Yogyakarta", "081234567802", true,
+                    "petugas01", PasswordUtil.hashPassword("petugas123"), Role.PETUGAS, ""));
+            changed = true;
+        }
+        if (!cariByUsername("dokter01").isPresent()) {
+            insert(new Petugas(generateNextId(), "dr. Ani Wijaya", JenisKelamin.PEREMPUAN,
+                    "Jl. Malioboro No. 10, Yogyakarta", "081234567890", true,
+                    "dokter01", PasswordUtil.hashPassword("dokter123"), Role.DOKTER, "DKT-001"));
+            changed = true;
+        }
+        if (!cariByUsername("dokter02").isPresent()) {
+            insert(new Petugas(generateNextId(), "dr. Hadi Nugroho, Sp.PD", JenisKelamin.LAKI_LAKI,
+                    "Jl. Kaliurang Km 5, Sleman", "081298765432", true,
+                    "dokter02", PasswordUtil.hashPassword("dokter123"), Role.DOKTER, "DKT-002"));
+            changed = true;
+        }
+        if (changed) {
             saveToFile();
         }
     }
@@ -59,7 +91,8 @@ public class PetugasDAO implements GenericDAO<Petugas, String> {
                 true,
                 "admin",
                 PasswordUtil.hashPassword("admin123"),
-                Role.ADMIN
+                Role.ADMIN,
+                ""
         ));
         insert(new Petugas(
                 generateNextId(),
@@ -70,7 +103,8 @@ public class PetugasDAO implements GenericDAO<Petugas, String> {
                 true,
                 "petugas01",
                 PasswordUtil.hashPassword("petugas123"),
-                Role.PETUGAS
+                Role.PETUGAS,
+                ""
         ));
         insert(new Petugas(
                 generateNextId(),
@@ -81,7 +115,8 @@ public class PetugasDAO implements GenericDAO<Petugas, String> {
                 true,
                 "petugas",
                 PasswordUtil.hashPassword("petugas123"),
-                Role.PETUGAS
+                Role.PETUGAS,
+                ""
         ));
         insert(new Petugas(
                 generateNextId(),
@@ -92,7 +127,8 @@ public class PetugasDAO implements GenericDAO<Petugas, String> {
                 true,
                 "dokter01",
                 PasswordUtil.hashPassword("dokter123"),
-                Role.DOKTER
+                Role.DOKTER,
+                "DKT-001"
         ));
         insert(new Petugas(
                 generateNextId(),
@@ -101,9 +137,22 @@ public class PetugasDAO implements GenericDAO<Petugas, String> {
                 "Jl. Kaliurang Km 5, Sleman",
                 "081298765432",
                 true,
+                "dokter02",
+                PasswordUtil.hashPassword("dokter123"),
+                Role.DOKTER,
+                "DKT-002"
+        ));
+        insert(new Petugas(
+                generateNextId(),
+                "dr. Ani Wijaya",
+                JenisKelamin.PEREMPUAN,
+                "Jl. Malioboro No. 10, Yogyakarta",
+                "081234567890",
+                true,
                 "dokter",
                 PasswordUtil.hashPassword("dokter123"),
-                Role.DOKTER
+                Role.DOKTER,
+                "DKT-001"
         ));
         insert(new Petugas(
                 generateNextId(),
@@ -114,7 +163,8 @@ public class PetugasDAO implements GenericDAO<Petugas, String> {
                 false,
                 "nonaktif",
                 PasswordUtil.hashPassword("nonaktif123"),
-                Role.PETUGAS
+                Role.PETUGAS,
+                ""
         ));
     }
 
@@ -237,14 +287,16 @@ public class PetugasDAO implements GenericDAO<Petugas, String> {
     private void ensurePasswordHashed(Petugas petugas) {
         String pwd = petugas.getPassword();
         if (pwd != null && !pwd.isEmpty() && !pwd.contains(":")) {
-            petugas.setPassword(PasswordUtil.hashPassword(pwd));
+            try {
+                petugas.setPassword(PasswordUtil.hashPassword(pwd));
+            } catch (DataTidakValidException ignored) {
+            }
         }
     }
 
     private synchronized void saveToFile() {
         try (PrintWriter writer = new PrintWriter(new FileWriter(FILE_PATH))) {
             for (Petugas p : storage.values()) {
-                // Format: id|nama|jenisKelamin|alamat|noTelepon|aktif|username|password|role
                 String line = String.join("|",
                         escape(p.getId()),
                         escape(p.getNama()),
@@ -254,7 +306,8 @@ public class PetugasDAO implements GenericDAO<Petugas, String> {
                         String.valueOf(p.isAktif()),
                         escape(p.getUsername()),
                         p.getPassword() != null ? p.getPassword() : "",
-                        p.getRole() != null ? p.getRole().name() : Role.PETUGAS.name()
+                        p.getRole() != null ? p.getRole().name() : Role.PETUGAS.name(),
+                        escape(p.getIdDokter())
                 );
                 writer.println(line);
             }
@@ -280,8 +333,12 @@ public class PetugasDAO implements GenericDAO<Petugas, String> {
                     String username = unescape(parts[6]);
                     String password = parts[7];
                     Role role = Role.fromString(parts[8]);
+                    String idDokter = parts.length >= 10 ? unescape(parts[9]) : "";
+                    if (role == Role.DOKTER && idDokter.isEmpty()) {
+                        idDokter = "DKT-001";
+                    }
 
-                    Petugas p = new Petugas(id, nama, jk, alamat, noTelp, aktif, username, password, role);
+                    Petugas p = new Petugas(id, nama, jk, alamat, noTelp, aktif, username, password, role, idDokter);
                     storage.put(id, p);
                     updateCounterFromId(id);
                 }

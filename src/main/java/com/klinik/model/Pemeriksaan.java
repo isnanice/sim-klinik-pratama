@@ -1,13 +1,18 @@
 package com.klinik.model;
 
+import com.klinik.exception.DataTidakValidException;
+
 import java.time.LocalDate;
 import java.time.format.DateTimeFormatter;
 import java.util.Objects;
 
 /**
  * Entitas Pemeriksaan / Kunjungan dalam Sistem Informasi Manajemen Klinik Pratama.
+ * Dilengkapi konstanta BATAS_PANGGILAN (3) dan method batalkan(...) sesuai BR-14 & BR-15.
  */
 public class Pemeriksaan implements DapatDicetak {
+    public static final int BATAS_PANGGILAN = 3;
+
     private String id;
     private String nomorAntreanPoli;
     private Pasien pasien;
@@ -22,14 +27,26 @@ public class Pemeriksaan implements DapatDicetak {
     private String hasilPemeriksaan;
     private String namaPetugas;
     private StatusPemeriksaan status;
+    private int jumlahPanggilan;
+    private String alasanBatal;
+    private String dibatalkanOleh;
 
     public Pemeriksaan() {
         this.status = StatusPemeriksaan.TERDAFTAR;
         this.tanggalPemeriksaan = LocalDate.now();
+        this.jumlahPanggilan = 0;
+        this.alasanBatal = "";
+        this.dibatalkanOleh = "";
     }
 
     public Pemeriksaan(String id, String nomorAntreanPoli, Pasien pasien, Dokter dokter, Layanan layanan,
                        LocalDate tanggalPemeriksaan, String keluhanAwal, String namaPetugas, StatusPemeriksaan status) {
+        this(id, nomorAntreanPoli, pasien, dokter, layanan, tanggalPemeriksaan, keluhanAwal, namaPetugas, status, 0, "");
+    }
+
+    public Pemeriksaan(String id, String nomorAntreanPoli, Pasien pasien, Dokter dokter, Layanan layanan,
+                       LocalDate tanggalPemeriksaan, String keluhanAwal, String namaPetugas, StatusPemeriksaan status,
+                       int jumlahPanggilan, String alasanBatal) {
         this.id = id;
         this.nomorAntreanPoli = nomorAntreanPoli;
         this.pasien = pasien;
@@ -39,6 +56,9 @@ public class Pemeriksaan implements DapatDicetak {
         this.keluhanAwal = keluhanAwal;
         this.namaPetugas = namaPetugas;
         this.status = status != null ? status : StatusPemeriksaan.TERDAFTAR;
+        this.jumlahPanggilan = Math.max(0, jumlahPanggilan);
+        this.alasanBatal = alasanBatal != null ? alasanBatal : "";
+        this.dibatalkanOleh = "";
     }
 
     public String getId() {
@@ -153,6 +173,62 @@ public class Pemeriksaan implements DapatDicetak {
         this.status = status;
     }
 
+    public int getJumlahPanggilan() {
+        return jumlahPanggilan;
+    }
+
+    public void setJumlahPanggilan(int jumlahPanggilan) {
+        this.jumlahPanggilan = Math.max(0, jumlahPanggilan);
+    }
+
+    public void tambahPanggilan() {
+        this.jumlahPanggilan++;
+    }
+
+    public String getAlasanBatal() {
+        return alasanBatal;
+    }
+
+    public void setAlasanBatal(String alasanBatal) {
+        this.alasanBatal = alasanBatal != null ? alasanBatal.trim() : "";
+    }
+
+    public String getDibatalkanOleh() {
+        return dibatalkanOleh;
+    }
+
+    public void setDibatalkanOleh(String dibatalkanOleh) {
+        this.dibatalkanOleh = dibatalkanOleh != null ? dibatalkanOleh.trim() : "";
+    }
+
+    /**
+     * BR-14 & BR-15: Membatalkan kunjungan pemeriksaan.
+     * Melempar DataTidakValidException jika panggilan belum mencapai BATAS_PANGGILAN (3) atau alasan kosong.
+     */
+    public void batalkan(String alasan, String petugasPembatal) throws DataTidakValidException {
+        if (this.status == StatusPemeriksaan.SELESAI) {
+            throw new DataTidakValidException("Status Pemeriksaan", "Kunjungan yang sudah SELESAI tidak dapat dibatalkan.");
+        }
+        if (this.status == StatusPemeriksaan.DIBATALKAN) {
+            throw new DataTidakValidException("Status Pemeriksaan", "Kunjungan ini sudah berstatus DIBATALKAN.");
+        }
+        if (this.jumlahPanggilan < BATAS_PANGGILAN) {
+            throw new DataTidakValidException("Jumlah Panggilan",
+                    "Kunjungan belum dapat dibatalkan, pasien baru dipanggil " + this.jumlahPanggilan
+                            + " kali (minimal " + BATAS_PANGGILAN + " kali).");
+        }
+        if (alasan == null || alasan.trim().isEmpty()) {
+            throw new DataTidakValidException("Alasan Pembatalan", "Alasan pembatalan wajib diisi.");
+        }
+        this.alasanBatal = alasan.trim();
+        this.dibatalkanOleh = petugasPembatal != null ? petugasPembatal.trim() : "";
+        this.status = StatusPemeriksaan.DIBATALKAN;
+    }
+
+    public void batalkan(String alasan) throws DataTidakValidException {
+        batalkan(alasan, this.namaPetugas);
+    }
+
     @Override
     public String cetakRingkasan() {
         DateTimeFormatter df = DateTimeFormatter.ofPattern("dd-MM-yyyy");
@@ -165,6 +241,10 @@ public class Pemeriksaan implements DapatDicetak {
         sb.append(String.format("%-18s: %s%n", "Tanggal", tanggalPemeriksaan != null ? tanggalPemeriksaan.format(df) : "-"));
         sb.append(String.format("%-18s: %s%n", "Keluhan", keluhanAwal != null ? keluhanAwal : "-"));
         sb.append(String.format("%-18s: %s%n", "Status", status != null ? status.getLabel() : "-"));
+        sb.append(String.format("%-18s: %d kali%n", "Jml Panggilan", jumlahPanggilan));
+        if (alasanBatal != null && !alasanBatal.isEmpty()) {
+            sb.append(String.format("%-18s: %s%n", "Alasan Batal", alasanBatal));
+        }
         return sb.toString();
     }
 
@@ -187,4 +267,3 @@ public class Pemeriksaan implements DapatDicetak {
         return Objects.hash(id);
     }
 }
-
