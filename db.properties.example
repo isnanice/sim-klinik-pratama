@@ -1,0 +1,5 @@
+# Salin berkas ini menjadi db.properties (di folder utama proyek), lalu sesuaikan.
+# db.properties TIDAK boleh di-commit (sudah ada di .gitignore).
+db.url=jdbc:postgresql://localhost:5432/db_klinik_pratama
+db.user=klinik_user
+db.password=klinik123
