@@ -81,13 +81,14 @@ public class PasienView extends JPanel {
     private JComboBox<String> cmbKriteria;
     private JButton btnCari;
     private JButton btnReset;
+    private JTable tabel;
     private JTable tblPasien;
     private DefaultTableModel tableModel;
 
     public PasienView(PasienController controller) {
         this.controller = controller;
         initComponents();
-        setupEvents();
+        pasangListener();
         applyRolePermissions();
         refreshTable();
     }
@@ -243,9 +244,10 @@ public class PasienView extends JPanel {
             }
         };
 
-        tblPasien = new JTable(tableModel);
-        TableStyleHelper.applyStyle(tblPasien);
-        JScrollPane tableScroll = new JScrollPane(tblPasien);
+        tabel = new JTable(tableModel);
+        tblPasien = tabel;
+        TableStyleHelper.applyStyle(tabel);
+        JScrollPane tableScroll = new JScrollPane(tabel);
         tableScroll.setBorder(BorderFactory.createLineBorder(UITheme.BORDER));
         tableScroll.getViewport().setBackground(UITheme.SURFACE);
 
@@ -266,25 +268,20 @@ public class PasienView extends JPanel {
         panel.add(Box.createVerticalStrut(8));
     }
 
-    private void setupEvents() {
-        btnTambah.addActionListener(e -> tambahData());
-        btnUbah.addActionListener(e -> ubahData());
-        btnHapus.addActionListener(e -> hapusData());
-        btnNonaktifkan.addActionListener(e -> toggleAktifData());
-        btnDetail.addActionListener(e -> tampilkanDetail());
-        btnBersihkan.addActionListener(e -> bersihkanForm());
+    private void pasangListener() {
+        btnTambah.addActionListener(e -> aksiTambah());
+        btnUbah.addActionListener(e -> aksiUbah());
+        btnHapus.addActionListener(e -> aksiHapus());
+        btnNonaktifkan.addActionListener(e -> aksiNonaktifkan());
+        btnDetail.addActionListener(e -> aksiDetail());
+        btnCari.addActionListener(e -> aksiCari());
+        btnReset.addActionListener(e -> aksiReset());
+        btnBersihkan.addActionListener(e -> kosongkanForm());
+        txtCari.addActionListener(e -> aksiCari());
 
-        btnCari.addActionListener(e -> cariData());
-        txtCari.addActionListener(e -> cariData());
-        btnReset.addActionListener(e -> {
-            txtCari.setText("");
-            cmbKriteria.setSelectedIndex(0);
-            refreshTable();
-        });
-
-        tblPasien.getSelectionModel().addListSelectionListener(e -> {
-            if (!e.getValueIsAdjusting() && tblPasien.getSelectedRow() != -1) {
-                isiFormDariTabel(tblPasien.getSelectedRow());
+        tabel.getSelectionModel().addListSelectionListener(e -> {
+            if (!e.getValueIsAdjusting()) {
+                isiFormDariBaris();
             }
         });
     }
@@ -344,7 +341,11 @@ public class PasienView extends JPanel {
         }
     }
 
-    private void isiFormDariTabel(int row) {
+    private void isiFormDariBaris() {
+        int row = tabel.getSelectedRow();
+        if (row == -1) {
+            return;
+        }
         String id = (String) tableModel.getValueAt(row, 0);
         try {
             Pasien p = controller.getPasienById(id);
@@ -367,7 +368,7 @@ public class PasienView extends JPanel {
         }
     }
 
-    private void bersihkanForm() {
+    private void kosongkanForm() {
         txtId.setText("");
         txtNik.setText("");
         txtNama.setText("");
@@ -378,7 +379,7 @@ public class PasienView extends JPanel {
         txtNoBpjs.setText("");
         chkAktif.setSelected(true);
         btnNonaktifkan.setText("Nonaktifkan");
-        tblPasien.clearSelection();
+        tabel.clearSelection();
     }
 
     private Pasien bacaForm() throws DataTidakValidException {
@@ -394,13 +395,13 @@ public class PasienView extends JPanel {
         return p;
     }
 
-    private void tambahData() {
+    private void aksiTambah() {
         try {
             Pasien p = bacaForm();
-            controller.tambahPasien(p);
+            controller.tambah(p);
             JOptionPane.showMessageDialog(this, "Data pasien berhasil ditambahkan dengan ID: " + p.getId(),
                     "Sukses", JOptionPane.INFORMATION_MESSAGE);
-            bersihkanForm();
+            kosongkanForm();
             refreshTable();
         } catch (DataTidakValidException e) {
             JOptionPane.showMessageDialog(this, e.getMessage(), "Validasi Gagal", JOptionPane.WARNING_MESSAGE);
@@ -411,7 +412,7 @@ public class PasienView extends JPanel {
         }
     }
 
-    private void ubahData() {
+    private void aksiUbah() {
         String id = txtId.getText().trim();
         if (id.isEmpty()) {
             JOptionPane.showMessageDialog(this, "Pilih data pasien dari tabel yang ingin diubah.",
@@ -423,10 +424,10 @@ public class PasienView extends JPanel {
             Pasien p = bacaForm();
             p.setId(id);
             p.setTanggalRegistrasi(lama.getTanggalRegistrasi());
-            controller.ubahPasien(p);
+            controller.ubah(p);
             JOptionPane.showMessageDialog(this, "Data pasien berhasil diperbarui.",
                     "Sukses", JOptionPane.INFORMATION_MESSAGE);
-            bersihkanForm();
+            kosongkanForm();
             refreshTable();
         } catch (DataTidakValidException e) {
             JOptionPane.showMessageDialog(this, e.getMessage(), "Validasi Gagal", JOptionPane.WARNING_MESSAGE);
@@ -437,7 +438,7 @@ public class PasienView extends JPanel {
         }
     }
 
-    private void hapusData() {
+    private void aksiHapus() {
         String id = txtId.getText().trim();
         if (id.isEmpty()) {
             JOptionPane.showMessageDialog(this, "Pilih data pasien yang akan dihapus.", "Peringatan", JOptionPane.WARNING_MESSAGE);
@@ -452,28 +453,63 @@ public class PasienView extends JPanel {
         }
 
         try {
-            controller.hapusPasien(id);
+            controller.hapus(id);
             JOptionPane.showMessageDialog(this, "Data pasien berhasil dihapus.", "Sukses", JOptionPane.INFORMATION_MESSAGE);
-            bersihkanForm();
+            kosongkanForm();
             refreshTable();
         } catch (DataMasihDipakaiException e) {
-            int opt = JOptionPane.showOptionDialog(this,
-                    e.getMessage(),
-                    "Data Tidak Dapat Dihapus",
-                    JOptionPane.YES_NO_OPTION,
-                    JOptionPane.WARNING_MESSAGE,
-                    null,
-                    new Object[]{"Nonaktifkan", "Batal"},
-                    "Nonaktifkan");
-            if (opt == 0) {
-                try {
-                    controller.nonaktifkanPasien(id, false);
-                    JOptionPane.showMessageDialog(this, "Pasien berhasil dinonaktifkan.", "Sukses", JOptionPane.INFORMATION_MESSAGE);
-                    bersihkanForm();
-                    refreshTable();
-                } catch (Exception ex) {
-                    tampilkanError(ex);
-                }
+            tawarkanNonaktif(id, e.getMessage());
+        } catch (AksesDitolakException e) {
+            JOptionPane.showMessageDialog(this, e.getMessage(), "Akses Ditolak", JOptionPane.ERROR_MESSAGE);
+        } catch (Exception e) {
+            tampilkanError(e);
+        }
+    }
+
+    private void tawarkanNonaktif(String id, String pesan) {
+        int opt = JOptionPane.showOptionDialog(this,
+                pesan,
+                "Data Tidak Dapat Dihapus",
+                JOptionPane.YES_NO_OPTION,
+                JOptionPane.WARNING_MESSAGE,
+                null,
+                new Object[]{"Nonaktifkan", "Batal"},
+                "Nonaktifkan");
+        if (opt == 0) {
+            aksiNonaktifkan(id);
+        }
+    }
+
+    private void aksiNonaktifkan(String id) {
+        try {
+            controller.nonaktifkan(id);
+            JOptionPane.showMessageDialog(this, "Pasien berhasil dinonaktifkan.", "Sukses", JOptionPane.INFORMATION_MESSAGE);
+            kosongkanForm();
+            refreshTable();
+        } catch (AksesDitolakException e) {
+            JOptionPane.showMessageDialog(this, e.getMessage(), "Akses Ditolak", JOptionPane.ERROR_MESSAGE);
+        } catch (Exception ex) {
+            tampilkanError(ex);
+        }
+    }
+
+    private void aksiNonaktifkan() {
+        String id = txtId.getText().trim();
+        if (id.isEmpty()) {
+            JOptionPane.showMessageDialog(this, "Pilih data pasien dari tabel.", "Peringatan", JOptionPane.WARNING_MESSAGE);
+            return;
+        }
+        try {
+            Pasien p = controller.getPasienById(id);
+            if (p.isAktif()) {
+                aksiNonaktifkan(id);
+            } else {
+                controller.nonaktifkanPasien(id, true);
+                JOptionPane.showMessageDialog(this,
+                        "Pasien " + p.getNama() + " berhasil diaktifkan.",
+                        "Sukses", JOptionPane.INFORMATION_MESSAGE);
+                kosongkanForm();
+                refreshTable();
             }
         } catch (AksesDitolakException e) {
             JOptionPane.showMessageDialog(this, e.getMessage(), "Akses Ditolak", JOptionPane.ERROR_MESSAGE);
@@ -482,47 +518,31 @@ public class PasienView extends JPanel {
         }
     }
 
-    private void toggleAktifData() {
-        String id = txtId.getText().trim();
-        if (id.isEmpty()) {
-            JOptionPane.showMessageDialog(this, "Pilih data pasien dari tabel.", "Peringatan", JOptionPane.WARNING_MESSAGE);
-            return;
-        }
-        try {
-            Pasien p = controller.getPasienById(id);
-            boolean statusBaru = !p.isAktif();
-            controller.nonaktifkanPasien(id, statusBaru);
-            JOptionPane.showMessageDialog(this,
-                    "Pasien " + p.getNama() + " berhasil di" + (statusBaru ? "aktifkan." : "nonaktifkan."),
-                    "Sukses", JOptionPane.INFORMATION_MESSAGE);
-            bersihkanForm();
-            refreshTable();
-        } catch (AksesDitolakException e) {
-            JOptionPane.showMessageDialog(this, e.getMessage(), "Akses Ditolak", JOptionPane.ERROR_MESSAGE);
-        } catch (Exception e) {
-            tampilkanError(e);
-        }
-    }
-
-    private void tampilkanDetail() {
+    private void aksiDetail() {
         String id = txtId.getText().trim();
         if (id.isEmpty()) {
             JOptionPane.showMessageDialog(this, "Pilih baris pasien pada tabel untuk melihat detail.", "Peringatan", JOptionPane.WARNING_MESSAGE);
             return;
         }
         try {
-            DetailDialog.show(this, "Detail Pasien", controller.getPasienById(id));
+            DetailDialog.tampilkan(this, "Detail Pasien", controller.getPasienById(id));
         } catch (Exception e) {
             tampilkanError(e);
         }
     }
 
-    private void cariData() {
+    private void aksiCari() {
         populateTable(controller.cariPasien(txtCari.getText(), (String) cmbKriteria.getSelectedItem()));
     }
 
-    private void tampilkanError(Exception e) {
-        JOptionPane.showMessageDialog(this, "Terjadi kesalahan: " + e.getMessage(), "Error", JOptionPane.ERROR_MESSAGE);
+    private void aksiReset() {
+        txtCari.setText("");
+        cmbKriteria.setSelectedIndex(0);
+        refreshTable();
+    }
+
+    private void tampilkanError(Exception ex) {
+        JOptionPane.showMessageDialog(this, "Terjadi kesalahan: " + ex.getMessage(), "Error", JOptionPane.ERROR_MESSAGE);
     }
 
     private static Date toDate(LocalDate d) {

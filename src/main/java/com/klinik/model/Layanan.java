@@ -73,7 +73,13 @@ public abstract class Layanan implements LayananMedis, DapatDicetak {
     public abstract String getJenisLayanan();
 
     @Override
-    public abstract double hitungTarif(double biayaTambahan);
+    public abstract double hitungTarif();
+
+    @Override
+    public double hitungTarif(double biayaTambahan) {
+        double tambahan = Math.max(0, biayaTambahan);
+        return hitungTarif() + tambahan;
+    }
 
     public String formatRupiah(double nilai) {
         NumberFormat nf = NumberFormat.getInstance(new Locale("id", "ID"));

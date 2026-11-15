@@ -46,7 +46,7 @@ public class LoginView extends JFrame {
     public LoginView(LoginController controller) {
         this.controller = controller;
         initComponents();
-        setupEvents();
+        pasangListener();
     }
 
     private void initComponents() {
@@ -196,7 +196,7 @@ public class LoginView extends JFrame {
         setLocationRelativeTo(null);
     }
 
-    private void setupEvents() {
+    private void pasangListener() {
         btnLogin.addActionListener(e -> aksiMasuk());
         btnReset.addActionListener(e -> {
             txtUsername.setText("");
@@ -214,7 +214,8 @@ public class LoginView extends JFrame {
         String password = new String(txtPassword.getPassword());
         try {
             lblPesanError.setText(" ");
-            controller.loginDanBukaMainFrame(username, password, this);
+            controller.login(username, password);
+            controller.bukaMainFrame(this);
         } catch (DataTidakValidException | DataNotFoundException ex) {
             lblPesanError.setText(ex.getMessage());
             JOptionPane.showMessageDialog(this, ex.getMessage(),

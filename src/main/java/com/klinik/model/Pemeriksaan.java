@@ -202,10 +202,24 @@ public class Pemeriksaan implements DapatDicetak {
     }
 
     /**
+     * Memajukan status tahapan pemeriksaan ke status tujuan apabila transisi valid (sesuai bolehKe).
+     */
+    public void majuKe(StatusPemeriksaan tujuan) throws DataTidakValidException {
+        if (tujuan == null) {
+            throw new DataTidakValidException("Status Pemeriksaan", "Status tujuan tidak boleh kosong.");
+        }
+        if (this.status != null && !this.status.bolehKe(tujuan)) {
+            throw new DataTidakValidException("Status Pemeriksaan",
+                    "Perubahan status dari " + this.status.getLabel() + " ke " + tujuan.getLabel() + " tidak diizinkan.");
+        }
+        this.status = tujuan;
+    }
+
+    /**
      * BR-14 & BR-15: Membatalkan kunjungan pemeriksaan.
      * Melempar DataTidakValidException jika panggilan belum mencapai BATAS_PANGGILAN (3) atau alasan kosong.
      */
-    public void batalkan(String alasan, String petugasPembatal) throws DataTidakValidException {
+    public void batalkan(String alasan, String oleh) throws DataTidakValidException {
         if (this.status == StatusPemeriksaan.SELESAI) {
             throw new DataTidakValidException("Status Pemeriksaan", "Kunjungan yang sudah SELESAI tidak dapat dibatalkan.");
         }
@@ -221,7 +235,7 @@ public class Pemeriksaan implements DapatDicetak {
             throw new DataTidakValidException("Alasan Pembatalan", "Alasan pembatalan wajib diisi.");
         }
         this.alasanBatal = alasan.trim();
-        this.dibatalkanOleh = petugasPembatal != null ? petugasPembatal.trim() : "";
+        this.dibatalkanOleh = oleh != null ? oleh.trim() : "";
         this.status = StatusPemeriksaan.DIBATALKAN;
     }
 

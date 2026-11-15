@@ -159,7 +159,7 @@ public class MainFrame extends JFrame {
         // 1. Beranda
         JMenu menuBeranda = createStyledMenu("Beranda");
         JMenuItem miHome = new JMenuItem("Halaman Sambutan");
-        miHome.addActionListener(e -> cardLayout.show(mainContainer, "BERANDA"));
+        miHome.addActionListener(e -> tampilkan("BERANDA"));
         menuBeranda.add(miHome);
         menuBeranda.setVisible(HakAkses.memilikiAkses(currentRole, HakAkses.MENU_BERANDA));
 
@@ -168,25 +168,15 @@ public class MainFrame extends JFrame {
 
         JMenuItem miPasien = new JMenuItem("Pasien");
         miPasien.setVisible(HakAkses.memilikiAkses(currentRole, HakAkses.MENU_PASIEN));
-        miPasien.addActionListener(e -> {
-            pasienView.applyRolePermissions();
-            pasienView.refreshTable();
-            cardLayout.show(mainContainer, "PASIEN");
-        });
+        miPasien.addActionListener(e -> tampilkan("PASIEN"));
 
         JMenuItem miDokter = new JMenuItem("Dokter");
         miDokter.setVisible(HakAkses.memilikiAkses(currentRole, HakAkses.MENU_DOKTER));
-        miDokter.addActionListener(e -> {
-            dokterView.setRole(currentRole);
-            cardLayout.show(mainContainer, "DOKTER");
-        });
+        miDokter.addActionListener(e -> tampilkan("DOKTER"));
 
         JMenuItem miLayanan = new JMenuItem("Layanan");
         miLayanan.setVisible(HakAkses.memilikiAkses(currentRole, HakAkses.MENU_LAYANAN));
-        miLayanan.addActionListener(e -> {
-            layananView.setRole(currentRole);
-            cardLayout.show(mainContainer, "LAYANAN");
-        });
+        miLayanan.addActionListener(e -> tampilkan("LAYANAN"));
 
         menuMaster.add(miPasien);
         menuMaster.add(miDokter);
@@ -200,17 +190,11 @@ public class MainFrame extends JFrame {
 
         JMenuItem miAntrean = new JMenuItem("Antrean Pemeriksaan");
         miAntrean.setVisible(HakAkses.memilikiAkses(currentRole, HakAkses.MENU_ANTREAN));
-        miAntrean.addActionListener(e -> {
-            antreanView.refreshTable();
-            cardLayout.show(mainContainer, "ANTREAN");
-        });
+        miAntrean.addActionListener(e -> tampilkan("ANTREAN"));
 
         JMenuItem miSurat = new JMenuItem("Surat Izin & Rujukan");
         miSurat.setVisible(HakAkses.memilikiAkses(currentRole, HakAkses.MENU_SURAT));
-        miSurat.addActionListener(e -> {
-            suratView.refreshViewForCurrentSession();
-            cardLayout.show(mainContainer, "SURAT");
-        });
+        miSurat.addActionListener(e -> tampilkan("SURAT"));
 
         JMenuItem miRekamMedis = new JMenuItem("Rekam Medis");
         miRekamMedis.setVisible(HakAkses.memilikiAkses(currentRole, HakAkses.MENU_REKAM_MEDIS));
@@ -310,23 +294,17 @@ public class MainFrame extends JFrame {
 
         if (HakAkses.memilikiAkses(currentRole, HakAkses.MENU_PASIEN)) {
             JButton btnGoPasien = UITheme.createPrimaryButton("Data Pasien");
-            btnGoPasien.addActionListener(e -> cardLayout.show(mainContainer, "PASIEN"));
+            btnGoPasien.addActionListener(e -> tampilkan("PASIEN"));
             quickBtnPanel.add(btnGoPasien);
         }
         if (HakAkses.memilikiAkses(currentRole, HakAkses.MENU_ANTREAN)) {
             JButton btnGoAntrean = UITheme.createSecondaryButton("Antrean Pemeriksaan");
-            btnGoAntrean.addActionListener(e -> {
-                antreanView.refreshTable();
-                cardLayout.show(mainContainer, "ANTREAN");
-            });
+            btnGoAntrean.addActionListener(e -> tampilkan("ANTREAN"));
             quickBtnPanel.add(btnGoAntrean);
         }
         if (HakAkses.memilikiAkses(currentRole, HakAkses.MENU_SURAT)) {
             JButton btnGoSurat = UITheme.createSecondaryButton("Surat Izin & Rujukan");
-            btnGoSurat.addActionListener(e -> {
-                suratView.refreshViewForCurrentSession();
-                cardLayout.show(mainContainer, "SURAT");
-            });
+            btnGoSurat.addActionListener(e -> tampilkan("SURAT"));
             quickBtnPanel.add(btnGoSurat);
         }
 
@@ -364,6 +342,22 @@ public class MainFrame extends JFrame {
         bar.add(lblStatusUser, BorderLayout.WEST);
         bar.add(btnStatusLogout, BorderLayout.EAST);
         return bar;
+    }
+
+    public void tampilkan(String namaKartu) {
+        if ("PASIEN".equals(namaKartu)) {
+            pasienView.applyRolePermissions();
+            pasienView.refreshTable();
+        } else if ("DOKTER".equals(namaKartu)) {
+            dokterView.setRole(currentRole);
+        } else if ("LAYANAN".equals(namaKartu)) {
+            layananView.setRole(currentRole);
+        } else if ("ANTREAN".equals(namaKartu)) {
+            antreanView.refreshTable();
+        } else if ("SURAT".equals(namaKartu)) {
+            suratView.refreshViewForCurrentSession();
+        }
+        cardLayout.show(mainContainer, namaKartu);
     }
 
     private void prosesLogout() {

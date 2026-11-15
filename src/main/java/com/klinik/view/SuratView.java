@@ -79,7 +79,7 @@ public class SuratView extends JPanel {
     public SuratView(SuratController controller) {
         this.controller = controller;
         initComponents();
-        setupEvents();
+        pasangListener();
         refreshViewForCurrentSession();
     }
 
@@ -235,7 +235,7 @@ public class SuratView extends JPanel {
         panel.add(Box.createVerticalStrut(8));
     }
 
-    private void setupEvents() {
+    private void pasangListener() {
         cmbJenisSurat.addActionListener(e -> updateJenisSuratFields());
         btnBuatSurat.addActionListener(e -> prosesBuatSurat());
         btnTandaiDiserahkan.addActionListener(e -> prosesTandaiDiserahkan());

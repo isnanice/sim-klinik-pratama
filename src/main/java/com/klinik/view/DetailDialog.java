@@ -64,5 +64,13 @@ public class DetailDialog extends JDialog {
             new DetailDialog((Frame) null, title, entity).setVisible(true);
         }
     }
+
+    public static void tampilkan(Component parent, DapatDicetak data) {
+        show(parent, "Detail Data", data);
+    }
+
+    public static void tampilkan(Component parent, String title, DapatDicetak data) {
+        show(parent, title, data);
+    }
 }
 

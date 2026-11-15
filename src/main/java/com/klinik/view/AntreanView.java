@@ -57,7 +57,7 @@ public class AntreanView extends JPanel {
     public AntreanView(PemeriksaanDAO pemeriksaanDAO) {
         this.pemeriksaanDAO = pemeriksaanDAO;
         initComponents();
-        setupEvents();
+        pasangListener();
         refreshTable();
     }
 
@@ -197,7 +197,7 @@ public class AntreanView extends JPanel {
         add(tableScroll, BorderLayout.CENTER);
     }
 
-    private void setupEvents() {
+    private void pasangListener() {
         cmbFilterStatus.addActionListener(e -> refreshTable());
         btnRefresh.addActionListener(e -> refreshTable());
         btnPanggil.addActionListener(e -> panggilPasienTerpilih());

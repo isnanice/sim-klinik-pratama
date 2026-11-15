@@ -5,17 +5,18 @@ package com.klinik.model;
  * Polimorfisme: Tarif akhir = Tarif Dasar + Biaya Tambahan + Biaya Konsultasi Spesialis.
  */
 public class LayananSpesialis extends Layanan {
-    public static final double DEFAULT_BIAYA_KONSULTASI_SPESIALIS = 50000.0;
+    public static final double BIAYA_KONSULTASI_SPESIALIS = 50000.0;
+    public static final double DEFAULT_BIAYA_KONSULTASI_SPESIALIS = BIAYA_KONSULTASI_SPESIALIS;
     private double biayaKonsultasiSpesialis;
 
     public LayananSpesialis() {
         super();
-        this.biayaKonsultasiSpesialis = DEFAULT_BIAYA_KONSULTASI_SPESIALIS;
+        this.biayaKonsultasiSpesialis = BIAYA_KONSULTASI_SPESIALIS;
     }
 
     public LayananSpesialis(String id, String namaLayanan, double tarifDasar, String keterangan, boolean aktif) {
         super(id, namaLayanan, tarifDasar, keterangan, aktif);
-        this.biayaKonsultasiSpesialis = DEFAULT_BIAYA_KONSULTASI_SPESIALIS;
+        this.biayaKonsultasiSpesialis = BIAYA_KONSULTASI_SPESIALIS;
     }
 
     public LayananSpesialis(String id, String namaLayanan, double tarifDasar, String keterangan,
@@ -38,9 +39,13 @@ public class LayananSpesialis extends Layanan {
     }
 
     @Override
+    public double hitungTarif() {
+        return this.tarifDasar + this.biayaKonsultasiSpesialis;
+    }
+
+    @Override
     public double hitungTarif(double biayaTambahan) {
-        double tambahan = Math.max(0, biayaTambahan);
-        return this.tarifDasar + tambahan + this.biayaKonsultasiSpesialis;
+        return super.hitungTarif(biayaTambahan);
     }
 
     @Override

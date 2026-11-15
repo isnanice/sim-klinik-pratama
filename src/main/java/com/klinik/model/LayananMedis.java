@@ -8,6 +8,7 @@ public interface LayananMedis {
     String getNamaLayanan();
     String getJenisLayanan();
     double getTarifDasar();
+    double hitungTarif();
     double hitungTarif(double biayaTambahan);
 }
 
