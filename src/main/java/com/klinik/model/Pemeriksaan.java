@@ -22,14 +22,24 @@ public class Pemeriksaan implements DapatDicetak {
     private String hasilPemeriksaan;
     private String namaPetugas;
     private StatusPemeriksaan status;
+    private int jumlahPanggilan;
+    private String alasanBatal;
 
     public Pemeriksaan() {
         this.status = StatusPemeriksaan.TERDAFTAR;
         this.tanggalPemeriksaan = LocalDate.now();
+        this.jumlahPanggilan = 0;
+        this.alasanBatal = "";
     }
 
     public Pemeriksaan(String id, String nomorAntreanPoli, Pasien pasien, Dokter dokter, Layanan layanan,
                        LocalDate tanggalPemeriksaan, String keluhanAwal, String namaPetugas, StatusPemeriksaan status) {
+        this(id, nomorAntreanPoli, pasien, dokter, layanan, tanggalPemeriksaan, keluhanAwal, namaPetugas, status, 0, "");
+    }
+
+    public Pemeriksaan(String id, String nomorAntreanPoli, Pasien pasien, Dokter dokter, Layanan layanan,
+                       LocalDate tanggalPemeriksaan, String keluhanAwal, String namaPetugas, StatusPemeriksaan status,
+                       int jumlahPanggilan, String alasanBatal) {
         this.id = id;
         this.nomorAntreanPoli = nomorAntreanPoli;
         this.pasien = pasien;
@@ -39,6 +49,8 @@ public class Pemeriksaan implements DapatDicetak {
         this.keluhanAwal = keluhanAwal;
         this.namaPetugas = namaPetugas;
         this.status = status != null ? status : StatusPemeriksaan.TERDAFTAR;
+        this.jumlahPanggilan = Math.max(0, jumlahPanggilan);
+        this.alasanBatal = alasanBatal != null ? alasanBatal : "";
     }
 
     public String getId() {
@@ -153,6 +165,26 @@ public class Pemeriksaan implements DapatDicetak {
         this.status = status;
     }
 
+    public int getJumlahPanggilan() {
+        return jumlahPanggilan;
+    }
+
+    public void setJumlahPanggilan(int jumlahPanggilan) {
+        this.jumlahPanggilan = Math.max(0, jumlahPanggilan);
+    }
+
+    public void tambahPanggilan() {
+        this.jumlahPanggilan++;
+    }
+
+    public String getAlasanBatal() {
+        return alasanBatal;
+    }
+
+    public void setAlasanBatal(String alasanBatal) {
+        this.alasanBatal = alasanBatal != null ? alasanBatal.trim() : "";
+    }
+
     @Override
     public String cetakRingkasan() {
         DateTimeFormatter df = DateTimeFormatter.ofPattern("dd-MM-yyyy");
@@ -165,6 +197,10 @@ public class Pemeriksaan implements DapatDicetak {
         sb.append(String.format("%-18s: %s%n", "Tanggal", tanggalPemeriksaan != null ? tanggalPemeriksaan.format(df) : "-"));
         sb.append(String.format("%-18s: %s%n", "Keluhan", keluhanAwal != null ? keluhanAwal : "-"));
         sb.append(String.format("%-18s: %s%n", "Status", status != null ? status.getLabel() : "-"));
+        sb.append(String.format("%-18s: %d kali%n", "Jml Panggilan", jumlahPanggilan));
+        if (alasanBatal != null && !alasanBatal.isEmpty()) {
+            sb.append(String.format("%-18s: %s%n", "Alasan Batal", alasanBatal));
+        }
         return sb.toString();
     }
 
@@ -187,4 +223,3 @@ public class Pemeriksaan implements DapatDicetak {
         return Objects.hash(id);
     }
 }
-

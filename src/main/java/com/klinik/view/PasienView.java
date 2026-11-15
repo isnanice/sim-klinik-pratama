@@ -1,17 +1,42 @@
 package com.klinik.view;
 
 import com.klinik.controller.PasienController;
+import com.klinik.exception.AksesDitolakException;
 import com.klinik.exception.DataMasihDipakaiException;
 import com.klinik.exception.DataTidakValidException;
 import com.klinik.model.JenisKelamin;
 import com.klinik.model.Pasien;
+import com.klinik.model.Role;
+import com.klinik.util.HakAkses;
+import com.klinik.util.SesiPengguna;
 import com.klinik.view.component.TableStyleHelper;
 import com.klinik.view.theme.UITheme;
 
-import javax.swing.*;
+import javax.swing.BorderFactory;
+import javax.swing.Box;
+import javax.swing.BoxLayout;
+import javax.swing.ButtonGroup;
+import javax.swing.JButton;
+import javax.swing.JCheckBox;
+import javax.swing.JComboBox;
+import javax.swing.JComponent;
+import javax.swing.JLabel;
+import javax.swing.JOptionPane;
+import javax.swing.JPanel;
+import javax.swing.JRadioButton;
+import javax.swing.JScrollPane;
+import javax.swing.JSpinner;
+import javax.swing.JTable;
+import javax.swing.JTextArea;
+import javax.swing.JTextField;
+import javax.swing.SpinnerDateModel;
 import javax.swing.border.EmptyBorder;
 import javax.swing.table.DefaultTableModel;
-import java.awt.*;
+import java.awt.BorderLayout;
+import java.awt.Component;
+import java.awt.Dimension;
+import java.awt.FlowLayout;
+import java.awt.GridLayout;
 import java.time.LocalDate;
 import java.time.ZoneId;
 import java.time.format.DateTimeFormatter;
@@ -21,8 +46,8 @@ import java.util.List;
 
 /**
  * Tampilan Kelola Data Pasien.
- * Pola layout sama dengan DokterView: Form di atas (NORTH), Toolbar & Pencarian, Tabel di bawah (CENTER).
- * Pasien dapat dikelola oleh ADMIN maupun PETUGAS.
+ * Terintegrasi dengan PasienController, DetailDialog (untuk DapatDicetak),
+ * TableStyleHelper, serta otorisasi HakAkses.
  */
 public class PasienView extends JPanel {
     private static final LocalDate DEFAULT_TANGGAL_LAHIR = LocalDate.of(2000, 1, 1);
@@ -32,6 +57,7 @@ public class PasienView extends JPanel {
 
     // Komponen Form
     private JTextField txtId;
+    private JTextField txtNik;
     private JTextField txtNama;
     private JRadioButton rbLaki;
     private JRadioButton rbPerempuan;
@@ -41,6 +67,7 @@ public class PasienView extends JPanel {
     private JTextField txtNoTelepon;
     private JTextField txtNoBpjs;
     private JCheckBox chkAktif;
+    private JLabel lblRoleNote;
 
     // Tombol Form
     private JButton btnTambah;
@@ -62,6 +89,7 @@ public class PasienView extends JPanel {
         this.controller = controller;
         initComponents();
         setupEvents();
+        applyRolePermissions();
         refreshTable();
     }
 
@@ -77,6 +105,12 @@ public class PasienView extends JPanel {
         lblTitle.setFont(UITheme.FONT_TITLE);
         lblTitle.setForeground(UITheme.PRIMARY);
         headerPanel.add(lblTitle, BorderLayout.WEST);
+
+        lblRoleNote = new JLabel("Mode Baca: Role Anda hanya diizinkan melihat dan mencari data pasien.");
+        lblRoleNote.setFont(UITheme.FONT_MUTED);
+        lblRoleNote.setForeground(UITheme.TEXT_MUTED);
+        lblRoleNote.setVisible(false);
+        headerPanel.add(lblRoleNote, BorderLayout.EAST);
 
         // FORM SECTION (NORTH)
         JPanel northContainer = new JPanel();
@@ -95,6 +129,7 @@ public class PasienView extends JPanel {
         leftCol.setOpaque(false);
 
         txtId = UITheme.createReadOnlyField();
+        txtNik = UITheme.createTextField();
         txtNama = UITheme.createTextField();
 
         rbLaki = new JRadioButton("Laki-laki");
@@ -113,7 +148,7 @@ public class PasienView extends JPanel {
         genderPanel.add(rbLaki);
         genderPanel.add(rbPerempuan);
 
-        txtAlamat = new JTextArea(3, 20);
+        txtAlamat = new JTextArea(2, 20);
         txtAlamat.setFont(UITheme.FONT_REGULAR);
         txtAlamat.setBorder(UITheme.createFieldBorder());
         txtAlamat.setLineWrap(true);
@@ -122,6 +157,7 @@ public class PasienView extends JPanel {
         spAlamat.setBorder(BorderFactory.createLineBorder(UITheme.BORDER));
 
         addField(leftCol, "ID Pasien", txtId);
+        addField(leftCol, "NIK (16 digit, opsional)", txtNik);
         addField(leftCol, "Nama *", txtNama);
         addField(leftCol, "Jenis Kelamin *", genderPanel);
         addField(leftCol, "Alamat", spAlamat);
@@ -179,7 +215,7 @@ public class PasienView extends JPanel {
         searchPanel.setOpaque(false);
         JLabel lblCari = new JLabel("Cari berdasarkan:");
         lblCari.setFont(UITheme.FONT_REGULAR);
-        cmbKriteria = new JComboBox<>(new String[]{"Semua", "ID", "Nama", "No. BPJS"});
+        cmbKriteria = new JComboBox<>(new String[]{"Semua", "ID", "NIK", "Nama", "No. BPJS"});
         cmbKriteria.setFont(UITheme.FONT_REGULAR);
         cmbKriteria.setPreferredSize(new Dimension(120, 30));
 
@@ -200,7 +236,7 @@ public class PasienView extends JPanel {
         add(northContainer, BorderLayout.NORTH);
 
         // TABLE SECTION (CENTER)
-        String[] columns = {"ID", "Nama", "Jenis Kelamin", "Tgl Lahir", "No. Telepon", "No. BPJS", "Status"};
+        String[] columns = {"ID", "NIK", "Nama", "Jenis Kelamin", "Tgl Lahir", "No. Telepon", "No. BPJS", "Status"};
         tableModel = new DefaultTableModel(columns, 0) {
             @Override
             public boolean isCellEditable(int row, int column) {
@@ -254,9 +290,44 @@ public class PasienView extends JPanel {
         });
     }
 
+    public void applyRolePermissions() {
+        boolean canManage = HakAkses.memilikiAkses(HakAkses.KELOLA_PASIEN);
+        lblRoleNote.setVisible(!canManage);
+
+        txtNik.setEnabled(canManage);
+        txtNik.setBackground(canManage ? UITheme.SURFACE : UITheme.READ_ONLY_BG);
+        txtNama.setEnabled(canManage);
+        txtNama.setBackground(canManage ? UITheme.SURFACE : UITheme.READ_ONLY_BG);
+        rbLaki.setEnabled(canManage);
+        rbPerempuan.setEnabled(canManage);
+        spnTanggalLahir.setEnabled(canManage);
+        txtAlamat.setEnabled(canManage);
+        txtAlamat.setBackground(canManage ? UITheme.SURFACE : UITheme.READ_ONLY_BG);
+        txtNoTelepon.setEnabled(canManage);
+        txtNoTelepon.setBackground(canManage ? UITheme.SURFACE : UITheme.READ_ONLY_BG);
+        txtNoBpjs.setEnabled(canManage);
+        txtNoBpjs.setBackground(canManage ? UITheme.SURFACE : UITheme.READ_ONLY_BG);
+        chkAktif.setEnabled(canManage);
+
+        btnTambah.setEnabled(canManage);
+        btnUbah.setEnabled(canManage);
+        btnHapus.setEnabled(canManage);
+        btnNonaktifkan.setEnabled(canManage);
+        btnBersihkan.setEnabled(canManage);
+    }
+
+    public void setRole(Role role) {
+        boolean canManage = HakAkses.memilikiAkses(role, HakAkses.KELOLA_PASIEN);
+        lblRoleNote.setVisible(!canManage);
+        btnTambah.setEnabled(canManage);
+        btnUbah.setEnabled(canManage);
+        btnHapus.setEnabled(canManage);
+        btnNonaktifkan.setEnabled(canManage);
+    }
+
     // ---------- Tabel ----------
 
-    private void refreshTable() {
+    public void refreshTable() {
         populateTable(controller.getAllPasien());
     }
 
@@ -265,6 +336,7 @@ public class PasienView extends JPanel {
         for (Pasien p : list) {
             tableModel.addRow(new Object[]{
                     p.getId(),
+                    p.getNik() != null && !p.getNik().isEmpty() ? p.getNik() : "-",
                     p.getNama(),
                     p.getJenisKelamin() != null ? p.getJenisKelamin().getLabel() : "-",
                     p.getTanggalLahir() != null ? p.getTanggalLahir().format(FORMAT_TANGGAL) : "-",
@@ -280,6 +352,7 @@ public class PasienView extends JPanel {
         try {
             Pasien p = controller.getPasienById(id);
             txtId.setText(p.getId());
+            txtNik.setText(p.getNik() != null ? p.getNik() : "");
             txtNama.setText(p.getNama());
             if (p.getJenisKelamin() == JenisKelamin.PEREMPUAN) {
                 rbPerempuan.setSelected(true);
@@ -299,6 +372,7 @@ public class PasienView extends JPanel {
 
     private void bersihkanForm() {
         txtId.setText("");
+        txtNik.setText("");
         txtNama.setText("");
         rbLaki.setSelected(true);
         spnTanggalLahir.setValue(toDate(DEFAULT_TANGGAL_LAHIR));
@@ -312,9 +386,9 @@ public class PasienView extends JPanel {
 
     // ---------- Aksi ----------
 
-    /** Membaca isi form menjadi objek Pasien (belum divalidasi; validasi ada di controller). */
-    private Pasien bacaForm() {
+    private Pasien bacaForm() throws DataTidakValidException {
         Pasien p = new Pasien();
+        p.setNik(txtNik.getText());
         p.setNama(txtNama.getText());
         p.setJenisKelamin(rbPerempuan.isSelected() ? JenisKelamin.PEREMPUAN : JenisKelamin.LAKI_LAKI);
         p.setTanggalLahir(toLocalDate((Date) spnTanggalLahir.getValue()));
@@ -335,6 +409,8 @@ public class PasienView extends JPanel {
             refreshTable();
         } catch (DataTidakValidException e) {
             JOptionPane.showMessageDialog(this, e.getMessage(), "Validasi Gagal", JOptionPane.WARNING_MESSAGE);
+        } catch (AksesDitolakException e) {
+            JOptionPane.showMessageDialog(this, e.getMessage(), "Akses Ditolak", JOptionPane.ERROR_MESSAGE);
         } catch (Exception e) {
             tampilkanError(e);
         }
@@ -359,6 +435,8 @@ public class PasienView extends JPanel {
             refreshTable();
         } catch (DataTidakValidException e) {
             JOptionPane.showMessageDialog(this, e.getMessage(), "Validasi Gagal", JOptionPane.WARNING_MESSAGE);
+        } catch (AksesDitolakException e) {
+            JOptionPane.showMessageDialog(this, e.getMessage(), "Akses Ditolak", JOptionPane.ERROR_MESSAGE);
         } catch (Exception e) {
             tampilkanError(e);
         }
@@ -402,6 +480,8 @@ public class PasienView extends JPanel {
                     tampilkanError(ex);
                 }
             }
+        } catch (AksesDitolakException e) {
+            JOptionPane.showMessageDialog(this, e.getMessage(), "Akses Ditolak", JOptionPane.ERROR_MESSAGE);
         } catch (Exception e) {
             tampilkanError(e);
         }
@@ -422,6 +502,8 @@ public class PasienView extends JPanel {
                     "Sukses", JOptionPane.INFORMATION_MESSAGE);
             bersihkanForm();
             refreshTable();
+        } catch (AksesDitolakException e) {
+            JOptionPane.showMessageDialog(this, e.getMessage(), "Akses Ditolak", JOptionPane.ERROR_MESSAGE);
         } catch (Exception e) {
             tampilkanError(e);
         }
@@ -447,8 +529,6 @@ public class PasienView extends JPanel {
     private void tampilkanError(Exception e) {
         JOptionPane.showMessageDialog(this, "Terjadi kesalahan: " + e.getMessage(), "Error", JOptionPane.ERROR_MESSAGE);
     }
-
-    // ---------- Konversi tanggal (JSpinner memakai java.util.Date, model memakai LocalDate) ----------
 
     private static Date toDate(LocalDate d) {
         return Date.from(d.atStartOfDay(ZoneId.systemDefault()).toInstant());

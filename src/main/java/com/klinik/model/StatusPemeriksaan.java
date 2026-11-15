@@ -1,9 +1,14 @@
 package com.klinik.model;
 
+/**
+ * Enum status tahapan pemeriksaan/kunjungan pasien di klinik.
+ */
 public enum StatusPemeriksaan {
     TERDAFTAR("TERDAFTAR"),
     MENUNGGU_TTV("MENUNGGU_TTV"),
+    TTV_SELESAI("TTV_SELESAI"),
     MENUNGGU_DOKTER("MENUNGGU_DOKTER"),
+    DIPERIKSA("DIPERIKSA"),
     MENUNGGU_OBAT("MENUNGGU_OBAT"),
     MENUNGGU("MENUNGGU"),
     SELESAI("SELESAI"),
@@ -34,4 +39,3 @@ public enum StatusPemeriksaan {
         return null;
     }
 }
-
