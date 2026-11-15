@@ -25,22 +25,29 @@ import java.util.stream.Collectors;
  * Menyediakan pencarian berdasarkan username, validasi status aktif, dan operasi CRUD dasar petugas.
  */
 public class PetugasDAO implements GenericDAO<Petugas, String> {
-    private static final String DATA_DIR = "data";
-    private static final String FILE_PATH = DATA_DIR + File.separator + "petugas.txt";
+    private static final String DEFAULT_DATA_DIR = "data";
+    private final String dataDir;
+    private final String filePath;
 
     private final Map<String, Petugas> storage = new LinkedHashMap<>();
     private int counter = 0;
 
     public PetugasDAO() {
+        this(System.getProperty("klinik.data.dir", DEFAULT_DATA_DIR));
+    }
+
+    public PetugasDAO(String dataDir) {
+        this.dataDir = (dataDir != null && !dataDir.trim().isEmpty()) ? dataDir.trim() : DEFAULT_DATA_DIR;
+        this.filePath = this.dataDir + File.separator + "petugas.txt";
         initStorage();
     }
 
     private void initStorage() {
-        File dir = new File(DATA_DIR);
+        File dir = new File(dataDir);
         if (!dir.exists()) {
             dir.mkdirs();
         }
-        File file = new File(FILE_PATH);
+        File file = new File(filePath);
         if (file.exists()) {
             loadFromFile();
             ensureDefaultAccounts();
@@ -295,7 +302,7 @@ public class PetugasDAO implements GenericDAO<Petugas, String> {
     }
 
     private synchronized void saveToFile() {
-        try (PrintWriter writer = new PrintWriter(new FileWriter(FILE_PATH))) {
+        try (PrintWriter writer = new PrintWriter(new FileWriter(filePath))) {
             for (Petugas p : storage.values()) {
                 String line = String.join("|",
                         escape(p.getId()),
@@ -318,7 +325,7 @@ public class PetugasDAO implements GenericDAO<Petugas, String> {
 
     private synchronized void loadFromFile() {
         storage.clear();
-        try (BufferedReader reader = new BufferedReader(new FileReader(FILE_PATH))) {
+        try (BufferedReader reader = new BufferedReader(new FileReader(filePath))) {
             String line;
             while ((line = reader.readLine()) != null) {
                 if (line.trim().isEmpty()) continue;

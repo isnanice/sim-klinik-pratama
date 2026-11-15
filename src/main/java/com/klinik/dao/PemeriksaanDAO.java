@@ -26,8 +26,9 @@ import java.util.stream.Collectors;
  * Data Access Object untuk entitas Pemeriksaan dengan persistensi file teks/CSV (data/pemeriksaan.txt).
  */
 public class PemeriksaanDAO implements GenericDAO<Pemeriksaan, String> {
-    private static final String DATA_DIR = "data";
-    private static final String FILE_PATH = DATA_DIR + File.separator + "pemeriksaan.txt";
+    private static final String DEFAULT_DATA_DIR = "data";
+    private final String dataDir;
+    private final String filePath;
     private final Map<String, Pemeriksaan> storage = new LinkedHashMap<>();
     private final PasienDAO pasienDAO;
     private final DokterDAO dokterDAO;
@@ -35,16 +36,22 @@ public class PemeriksaanDAO implements GenericDAO<Pemeriksaan, String> {
     private int counter = 0;
 
     public PemeriksaanDAO(PasienDAO pasienDAO, DokterDAO dokterDAO, LayananDAO layananDAO) {
+        this(pasienDAO, dokterDAO, layananDAO, System.getProperty("klinik.data.dir", DEFAULT_DATA_DIR));
+    }
+
+    public PemeriksaanDAO(PasienDAO pasienDAO, DokterDAO dokterDAO, LayananDAO layananDAO, String dataDir) {
         this.pasienDAO = pasienDAO;
         this.dokterDAO = dokterDAO;
         this.layananDAO = layananDAO;
+        this.dataDir = (dataDir != null && !dataDir.trim().isEmpty()) ? dataDir.trim() : DEFAULT_DATA_DIR;
+        this.filePath = this.dataDir + File.separator + "pemeriksaan.txt";
         initStorage();
     }
 
     private void initStorage() {
-        File dir = new File(DATA_DIR);
+        File dir = new File(dataDir);
         if (!dir.exists()) dir.mkdirs();
-        File file = new File(FILE_PATH);
+        File file = new File(filePath);
         if (file.exists()) {
             loadFromFile();
             ensureSampleActiveVisitsForDokter();
@@ -207,7 +214,7 @@ public class PemeriksaanDAO implements GenericDAO<Pemeriksaan, String> {
     }
 
     private synchronized void saveToFile() {
-        try (PrintWriter writer = new PrintWriter(new FileWriter(FILE_PATH))) {
+        try (PrintWriter writer = new PrintWriter(new FileWriter(filePath))) {
             for (Pemeriksaan p : storage.values()) {
                 String line = String.join("|",
                         p.getId() != null ? p.getId() : "",
@@ -231,7 +238,7 @@ public class PemeriksaanDAO implements GenericDAO<Pemeriksaan, String> {
 
     private synchronized void loadFromFile() {
         storage.clear();
-        try (BufferedReader reader = new BufferedReader(new FileReader(FILE_PATH))) {
+        try (BufferedReader reader = new BufferedReader(new FileReader(filePath))) {
             String line;
             while ((line = reader.readLine()) != null) {
                 if (line.trim().isEmpty()) continue;

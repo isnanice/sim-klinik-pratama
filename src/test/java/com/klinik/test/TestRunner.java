@@ -25,15 +25,29 @@ public class TestRunner {
                     testName = dn.value();
                 }
 
+                boolean testFailed = false;
                 try {
                     testInstance.setUp();
                     m.invoke(testInstance);
-                    System.out.printf("[PASSED] %s%n", testName);
-                    passed++;
                 } catch (Throwable t) {
                     Throwable cause = t.getCause() != null ? t.getCause() : t;
                     System.out.printf("[FAILED] %s -> %s%n", testName, cause.getMessage());
+                    testFailed = true;
+                } finally {
+                    try {
+                        testInstance.tearDown();
+                    } catch (Throwable cleanupError) {
+                        Throwable cause = cleanupError.getCause() != null ? cleanupError.getCause() : cleanupError;
+                        System.out.printf("[CLEANUP FAILED] %s -> %s%n", testName, cause.getMessage());
+                        testFailed = true;
+                    }
+                }
+
+                if (testFailed) {
                     failed++;
+                } else {
+                    System.out.printf("[PASSED] %s%n", testName);
+                    passed++;
                 }
             }
         }

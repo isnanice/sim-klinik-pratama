@@ -11,36 +11,32 @@ import java.util.stream.Collectors;
  * Data Access Object untuk entitas Pembayaran dengan persistensi file teks/CSV.
  */
 public class PembayaranDAO implements GenericDAO<Pembayaran, String> {
-    private static final String DATA_DIR = "data";
-    private static final String FILE_PATH = DATA_DIR + File.separator + "pembayaran.txt";
+    private static final String DEFAULT_DATA_DIR = "data";
+    private final String dataDir;
+    private final String filePath;
     private final Map<String, Pembayaran> storage = new LinkedHashMap<>();
     private final PemeriksaanDAO pemeriksaanDAO;
     private int counter = 0;
 
     public PembayaranDAO(PemeriksaanDAO pemeriksaanDAO) {
+        this(pemeriksaanDAO, System.getProperty("klinik.data.dir", DEFAULT_DATA_DIR));
+    }
+
+    public PembayaranDAO(PemeriksaanDAO pemeriksaanDAO, String dataDir) {
         this.pemeriksaanDAO = pemeriksaanDAO;
+        this.dataDir = (dataDir != null && !dataDir.trim().isEmpty()) ? dataDir.trim() : DEFAULT_DATA_DIR;
+        this.filePath = this.dataDir + File.separator + "pembayaran.txt";
         initStorage();
     }
 
     private void initStorage() {
-        File dir = new File(DATA_DIR);
+        File dir = new File(dataDir);
         if (!dir.exists()) dir.mkdirs();
-        File file = new File(FILE_PATH);
+        File file = new File(filePath);
         if (file.exists()) {
             loadFromFile();
         } else {
-            seedInitialData();
             saveToFile();
-        }
-    }
-
-    private void seedInitialData() {
-        List<Pemeriksaan> list = pemeriksaanDAO.findAll();
-        if (!list.isEmpty()) {
-            Pemeriksaan p = list.get(0);
-            double total = p.getLayanan() != null ? p.getLayanan().hitungTarif(0.0) : 75000.0;
-            Pembayaran byr = new Pembayaran(generateNextId(), p, LocalDate.now(), 0.0, total, MetodePembayaran.TUNAI, StatusPembayaran.LUNAS);
-            insert(byr);
         }
     }
 
@@ -101,7 +97,7 @@ public class PembayaranDAO implements GenericDAO<Pembayaran, String> {
     }
 
     private synchronized void saveToFile() {
-        try (PrintWriter writer = new PrintWriter(new FileWriter(FILE_PATH))) {
+        try (PrintWriter writer = new PrintWriter(new FileWriter(filePath))) {
             for (Pembayaran b : storage.values()) {
                 String line = String.join("|",
                         b.getId() != null ? b.getId() : "",
@@ -121,7 +117,7 @@ public class PembayaranDAO implements GenericDAO<Pembayaran, String> {
 
     private synchronized void loadFromFile() {
         storage.clear();
-        try (BufferedReader reader = new BufferedReader(new FileReader(FILE_PATH))) {
+        try (BufferedReader reader = new BufferedReader(new FileReader(filePath))) {
             String line;
             while ((line = reader.readLine()) != null) {
                 if (line.trim().isEmpty()) continue;

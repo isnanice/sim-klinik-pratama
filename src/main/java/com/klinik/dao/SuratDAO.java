@@ -27,22 +27,29 @@ import java.util.stream.Collectors;
  * serta pemfilteran daftar surat.
  */
 public class SuratDAO implements GenericDAO<Surat, String> {
-    private static final String DATA_DIR = "data";
-    private static final String FILE_PATH = DATA_DIR + File.separator + "surat.txt";
+    private static final String DEFAULT_DATA_DIR = "data";
+    private final String dataDir;
+    private final String filePath;
 
     private final Map<String, Surat> storage = new LinkedHashMap<>();
     private int counter = 0;
 
     public SuratDAO() {
+        this(System.getProperty("klinik.data.dir", DEFAULT_DATA_DIR));
+    }
+
+    public SuratDAO(String dataDir) {
+        this.dataDir = (dataDir != null && !dataDir.trim().isEmpty()) ? dataDir.trim() : DEFAULT_DATA_DIR;
+        this.filePath = this.dataDir + File.separator + "surat.txt";
         initStorage();
     }
 
     private void initStorage() {
-        File dir = new File(DATA_DIR);
+        File dir = new File(dataDir);
         if (!dir.exists()) {
             dir.mkdirs();
         }
-        File file = new File(FILE_PATH);
+        File file = new File(filePath);
         if (file.exists()) {
             loadFromFile();
         } else {
@@ -241,7 +248,7 @@ public class SuratDAO implements GenericDAO<Surat, String> {
     }
 
     private synchronized void saveToFile() {
-        try (PrintWriter writer = new PrintWriter(new FileWriter(FILE_PATH))) {
+        try (PrintWriter writer = new PrintWriter(new FileWriter(filePath))) {
             for (Surat s : storage.values()) {
                 // Format: idSurat|idPemeriksaan|jenis|isi|jumlahHari|tujuanRujukan|tanggalDibuat|status|diserahkanOleh
                 String line = String.join("|",
@@ -264,7 +271,7 @@ public class SuratDAO implements GenericDAO<Surat, String> {
 
     private synchronized void loadFromFile() {
         storage.clear();
-        try (BufferedReader reader = new BufferedReader(new FileReader(FILE_PATH))) {
+        try (BufferedReader reader = new BufferedReader(new FileReader(filePath))) {
             String line;
             while ((line = reader.readLine()) != null) {
                 if (line.trim().isEmpty()) continue;

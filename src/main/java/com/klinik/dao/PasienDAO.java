@@ -25,20 +25,32 @@ import java.util.stream.Collectors;
  * dan proteksi hapus permanen bila pasien memiliki riwayat pemeriksaan.
  */
 public class PasienDAO implements GenericDAO<Pasien, String> {
-    private static final String DATA_DIR = "data";
-    private static final String FILE_PATH = DATA_DIR + File.separator + "pasien.txt";
-    private static final String PEMERIKSAAN_FILE_PATH = DATA_DIR + File.separator + "pemeriksaan.txt";
+    private static final String DEFAULT_DATA_DIR = "data";
+    private final String dataDir;
+    private final String filePath;
+    private final String pemeriksaanFilePath;
 
     private final Map<String, Pasien> storage = new LinkedHashMap<>();
     private PemeriksaanDAO pemeriksaanDAO;
     private int counter = 0;
 
     public PasienDAO() {
-        initStorage();
+        this(null, System.getProperty("klinik.data.dir", DEFAULT_DATA_DIR));
+    }
+
+    public PasienDAO(String dataDir) {
+        this(null, dataDir);
     }
 
     public PasienDAO(PemeriksaanDAO pemeriksaanDAO) {
+        this(pemeriksaanDAO, System.getProperty("klinik.data.dir", DEFAULT_DATA_DIR));
+    }
+
+    public PasienDAO(PemeriksaanDAO pemeriksaanDAO, String dataDir) {
         this.pemeriksaanDAO = pemeriksaanDAO;
+        this.dataDir = (dataDir != null && !dataDir.trim().isEmpty()) ? dataDir.trim() : DEFAULT_DATA_DIR;
+        this.filePath = this.dataDir + File.separator + "pasien.txt";
+        this.pemeriksaanFilePath = this.dataDir + File.separator + "pemeriksaan.txt";
         initStorage();
     }
 
@@ -47,11 +59,11 @@ public class PasienDAO implements GenericDAO<Pasien, String> {
     }
 
     private void initStorage() {
-        File dir = new File(DATA_DIR);
+        File dir = new File(dataDir);
         if (!dir.exists()) {
             dir.mkdirs();
         }
-        File file = new File(FILE_PATH);
+        File file = new File(filePath);
         if (file.exists()) {
             loadFromFile();
         } else {
@@ -154,7 +166,7 @@ public class PasienDAO implements GenericDAO<Pasien, String> {
         if (pemeriksaanDAO != null && pemeriksaanDAO.existsByPasienId(pasienId)) {
             return true;
         }
-        File file = new File(PEMERIKSAAN_FILE_PATH);
+        File file = new File(pemeriksaanFilePath);
         if (!file.exists()) {
             return false;
         }
@@ -270,7 +282,7 @@ public class PasienDAO implements GenericDAO<Pasien, String> {
     }
 
     private synchronized void saveToFile() {
-        try (PrintWriter writer = new PrintWriter(new FileWriter(FILE_PATH))) {
+        try (PrintWriter writer = new PrintWriter(new FileWriter(filePath))) {
             for (Pasien p : storage.values()) {
                 // Format 10 kolom: id|nik|nama|jenisKelamin|tanggalLahir|alamat|noTelepon|noBpjs|tanggalRegistrasi|aktif
                 String line = String.join("|",
@@ -294,7 +306,7 @@ public class PasienDAO implements GenericDAO<Pasien, String> {
 
     private synchronized void loadFromFile() {
         storage.clear();
-        try (BufferedReader reader = new BufferedReader(new FileReader(FILE_PATH))) {
+        try (BufferedReader reader = new BufferedReader(new FileReader(filePath))) {
             String line;
             while ((line = reader.readLine()) != null) {
                 if (line.trim().isEmpty()) continue;

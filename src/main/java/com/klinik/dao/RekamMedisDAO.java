@@ -14,8 +14,9 @@ import java.util.stream.Collectors;
  * Data Access Object untuk entitas RekamMedis dengan persistensi file teks/CSV.
  */
 public class RekamMedisDAO implements GenericDAO<RekamMedis, String> {
-    private static final String DATA_DIR = "data";
-    private static final String FILE_PATH = DATA_DIR + File.separator + "rekam_medis.txt";
+    private static final String DEFAULT_DATA_DIR = "data";
+    private final String dataDir;
+    private final String filePath;
     private final Map<String, RekamMedis> storage = new LinkedHashMap<>();
     private final PemeriksaanDAO pemeriksaanDAO;
     private final PasienDAO pasienDAO;
@@ -23,16 +24,22 @@ public class RekamMedisDAO implements GenericDAO<RekamMedis, String> {
     private int counter = 0;
 
     public RekamMedisDAO(PemeriksaanDAO pemeriksaanDAO, PasienDAO pasienDAO, DokterDAO dokterDAO) {
+        this(pemeriksaanDAO, pasienDAO, dokterDAO, System.getProperty("klinik.data.dir", DEFAULT_DATA_DIR));
+    }
+
+    public RekamMedisDAO(PemeriksaanDAO pemeriksaanDAO, PasienDAO pasienDAO, DokterDAO dokterDAO, String dataDir) {
         this.pemeriksaanDAO = pemeriksaanDAO;
         this.pasienDAO = pasienDAO;
         this.dokterDAO = dokterDAO;
+        this.dataDir = (dataDir != null && !dataDir.trim().isEmpty()) ? dataDir.trim() : DEFAULT_DATA_DIR;
+        this.filePath = this.dataDir + File.separator + "rekam_medis.txt";
         initStorage();
     }
 
     private void initStorage() {
-        File dir = new File(DATA_DIR);
+        File dir = new File(dataDir);
         if (!dir.exists()) dir.mkdirs();
-        File file = new File(FILE_PATH);
+        File file = new File(filePath);
         if (file.exists()) {
             loadFromFile();
         } else {
@@ -118,7 +125,7 @@ public class RekamMedisDAO implements GenericDAO<RekamMedis, String> {
     }
 
     private synchronized void saveToFile() {
-        try (PrintWriter writer = new PrintWriter(new FileWriter(FILE_PATH))) {
+        try (PrintWriter writer = new PrintWriter(new FileWriter(filePath))) {
             for (RekamMedis rm : storage.values()) {
                 String line = String.join("|",
                         rm.getId() != null ? rm.getId() : "",
@@ -140,7 +147,7 @@ public class RekamMedisDAO implements GenericDAO<RekamMedis, String> {
 
     private synchronized void loadFromFile() {
         storage.clear();
-        try (BufferedReader reader = new BufferedReader(new FileReader(FILE_PATH))) {
+        try (BufferedReader reader = new BufferedReader(new FileReader(filePath))) {
             String line;
             while ((line = reader.readLine()) != null) {
                 if (line.trim().isEmpty()) continue;

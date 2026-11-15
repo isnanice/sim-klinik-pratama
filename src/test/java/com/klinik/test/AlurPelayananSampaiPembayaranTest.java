@@ -4,12 +4,19 @@ import com.klinik.controller.*;
 import com.klinik.dao.*;
 import com.klinik.exception.*;
 import com.klinik.model.*;
+import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 
+import java.io.IOException;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.Paths;
 import java.time.LocalDate;
+import java.util.Comparator;
 import java.util.List;
+import java.util.stream.Stream;
 
 import static org.junit.jupiter.api.Assertions.*;
 
@@ -19,6 +26,9 @@ import static org.junit.jupiter.api.Assertions.*;
  * aturan bisnis (BR), dan exception handling.
  */
 public class AlurPelayananSampaiPembayaranTest {
+
+    private static final Path APP_DATA_DIR = Paths.get("data").toAbsolutePath().normalize();
+    private static final Path TEST_DATA_DIR = Paths.get("target", "test-data").toAbsolutePath().normalize();
 
     private PasienDAO pasienDAO;
     private DokterDAO dokterDAO;
@@ -33,18 +43,48 @@ public class AlurPelayananSampaiPembayaranTest {
     private PembayaranController pembayaranController;
 
     @BeforeEach
-    void setUp() {
-        pasienDAO = new PasienDAO();
-        dokterDAO = new DokterDAO();
-        layananDAO = new LayananDAO();
-        pemeriksaanDAO = new PemeriksaanDAO(pasienDAO, dokterDAO, layananDAO);
-        rekamMedisDAO = new RekamMedisDAO(pemeriksaanDAO, pasienDAO, dokterDAO);
-        pembayaranDAO = new PembayaranDAO(pemeriksaanDAO);
+    void setUp() throws IOException {
+        cleanTestDataDirectory();
+        Files.createDirectories(TEST_DATA_DIR);
+
+        String testDir = TEST_DATA_DIR.toString();
+        pasienDAO = new PasienDAO(testDir);
+        dokterDAO = new DokterDAO(testDir);
+        layananDAO = new LayananDAO(testDir);
+        pemeriksaanDAO = new PemeriksaanDAO(pasienDAO, dokterDAO, layananDAO, testDir);
+        pasienDAO.setPemeriksaanDAO(pemeriksaanDAO);
+        rekamMedisDAO = new RekamMedisDAO(pemeriksaanDAO, pasienDAO, dokterDAO, testDir);
+        pembayaranDAO = new PembayaranDAO(pemeriksaanDAO, testDir);
 
         dokterController = new DokterController(dokterDAO, pemeriksaanDAO, Role.ADMIN);
         layananController = new LayananController(layananDAO, Role.ADMIN);
         rekamMedisController = new RekamMedisController(rekamMedisDAO, pemeriksaanDAO);
         pembayaranController = new PembayaranController(pembayaranDAO, pemeriksaanDAO);
+    }
+
+    @AfterEach
+    void tearDown() throws IOException {
+        cleanTestDataDirectory();
+    }
+
+    private void cleanTestDataDirectory() throws IOException {
+        if (TEST_DATA_DIR.equals(APP_DATA_DIR)
+                || TEST_DATA_DIR.startsWith(APP_DATA_DIR)
+                || APP_DATA_DIR.startsWith(TEST_DATA_DIR)) {
+            throw new IllegalStateException("Direktori pengujian tidak boleh mengarah atau mencakup direktori data aplikasi utama.");
+        }
+        if (Files.exists(TEST_DATA_DIR)) {
+            try (Stream<Path> walk = Files.walk(TEST_DATA_DIR)) {
+                List<Path> paths = walk.sorted(Comparator.reverseOrder()).toList();
+                for (Path entry : paths) {
+                    Path normalized = entry.toAbsolutePath().normalize();
+                    if (normalized.equals(APP_DATA_DIR) || normalized.startsWith(APP_DATA_DIR)) {
+                        throw new IllegalStateException("Operasi cleanup dibatalkan: terdeteksi jalur direktori data aplikasi utama.");
+                    }
+                    Files.deleteIfExists(normalized);
+                }
+            }
+        }
     }
 
     @Test
@@ -127,6 +167,14 @@ public class AlurPelayananSampaiPembayaranTest {
         String ringkasan = pembayaran.cetakRingkasan();
         assertTrue(ringkasan.contains("Total Biaya"));
         assertTrue(ringkasan.contains("Rp 225.000"));
+
+        // Step 9: Verifikasi pencegahan pembayaran duplikat untuk pemeriksaan yang sama
+        assertThrows(DataTidakValidException.class, () -> pembayaranController.prosesPembayaran(
+                pemeriksaan.getId(),
+                biayaTambahan,
+                MetodePembayaran.TUNAI,
+                StatusPembayaran.LUNAS
+        ));
     }
 
     @Test
