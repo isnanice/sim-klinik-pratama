@@ -5,23 +5,32 @@ import com.klinik.exception.DataTidakValidException;
 /**
  * Entitas Petugas/Pengguna Klinik Pratama.
  * Mewarisi Orang dan terhubung ke enum Role serta JenisKelamin.
+ * Mendukung keterkaitan idDokter apabila pengguna berperan sebagai DOKTER.
  */
 public class Petugas extends Orang implements DapatDicetak {
     private String username;
     private String password;
     private Role role;
+    private String idDokter;
 
     public Petugas() {
         super();
         this.role = Role.PETUGAS;
+        this.idDokter = "";
     }
 
     public Petugas(String id, String nama, JenisKelamin jenisKelamin, String alamat,
                    String noTelepon, boolean aktif, String username, String password, Role role) {
+        this(id, nama, jenisKelamin, alamat, noTelepon, aktif, username, password, role, "");
+    }
+
+    public Petugas(String id, String nama, JenisKelamin jenisKelamin, String alamat,
+                   String noTelepon, boolean aktif, String username, String password, Role role, String idDokter) {
         super(id, nama, jenisKelamin, alamat, noTelepon, aktif);
         this.username = username;
         this.password = password;
         this.role = role != null ? role : Role.PETUGAS;
+        this.idDokter = idDokter != null ? idDokter.trim() : "";
     }
 
     public String getUsername() {
@@ -46,6 +55,10 @@ public class Petugas extends Orang implements DapatDicetak {
         this.password = password;
     }
 
+    public String getPasswordHash() {
+        return password;
+    }
+
     public Role getRole() {
         return role;
     }
@@ -57,9 +70,21 @@ public class Petugas extends Orang implements DapatDicetak {
         this.role = role;
     }
 
+    public String getIdDokter() {
+        return idDokter;
+    }
+
+    public void setIdDokter(String idDokter) {
+        this.idDokter = idDokter != null ? idDokter.trim() : "";
+    }
+
     @Override
     public String getPeran() {
         return role != null ? role.getLabel() : "Petugas";
+    }
+
+    public String tampilkanInfo() {
+        return cetakRingkasan();
     }
 
     @Override
@@ -70,6 +95,9 @@ public class Petugas extends Orang implements DapatDicetak {
         sb.append(String.format("%-18s: %s%n", "Jenis Kelamin", jenisKelamin != null ? jenisKelamin.getLabel() : "-"));
         sb.append(String.format("%-18s: %s%n", "Username", username != null ? username : "-"));
         sb.append(String.format("%-18s: %s%n", "Role", role != null ? role.getLabel() : "-"));
+        if (idDokter != null && !idDokter.isEmpty()) {
+            sb.append(String.format("%-18s: %s%n", "ID Dokter", idDokter));
+        }
         sb.append(String.format("%-18s: %s%n", "No. Telepon", noTelepon != null ? noTelepon : "-"));
         sb.append(String.format("%-18s: %s%n", "Alamat", alamat != null ? alamat : "-"));
         sb.append(String.format("%-18s: %s%n", "Status", aktif ? "Aktif" : "Nonaktif"));

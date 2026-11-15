@@ -1,0 +1,2 @@
+SRT-001|PMR-001|IZIN|Pasien mengalami ISPA dan membutuhkan istirahat medis di rumah.|3||2026-11-16|DITERUSKAN|
+SRT-002|PMR-002|RUJUKAN|Mohon pemeriksaan endoskopi lanjutan atas indikasi gastritis kronis.|0|RSUP Dr. Sardjito - Poli Gastroenterologi|2026-11-16|DISERAHKAN|Rudi Hartono

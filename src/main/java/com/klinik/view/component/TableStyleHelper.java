@@ -68,16 +68,19 @@ public class TableStyleHelper {
                 }
 
                 String text = value != null ? value.toString() : "";
-                if ("Aktif".equalsIgnoreCase(text) || "SELESAI".equalsIgnoreCase(text) || "LUNAS".equalsIgnoreCase(text)) {
+                if ("Aktif".equalsIgnoreCase(text) || "SELESAI".equalsIgnoreCase(text)
+                        || "LUNAS".equalsIgnoreCase(text) || "DISERAHKAN".equalsIgnoreCase(text)) {
                     c.setForeground(UITheme.SUCCESS);
                     setFont(UITheme.FONT_BOLD);
                 } else if ("Nonaktif".equalsIgnoreCase(text) || "DIBATALKAN".equalsIgnoreCase(text)) {
                     c.setForeground(UITheme.DANGER);
                     setFont(UITheme.FONT_BOLD);
-                } else if ("MENUNGGU".equalsIgnoreCase(text) || "BELUM_LUNAS".equalsIgnoreCase(text) || text.startsWith("MENUNGGU_")) {
+                } else if ("MENUNGGU".equalsIgnoreCase(text) || "BELUM_LUNAS".equalsIgnoreCase(text)
+                        || text.startsWith("MENUNGGU_") || "DIPERIKSA".equalsIgnoreCase(text)) {
                     c.setForeground(UITheme.WARNING);
                     setFont(UITheme.FONT_BOLD);
-                } else if ("TERDAFTAR".equalsIgnoreCase(text)) {
+                } else if ("TERDAFTAR".equalsIgnoreCase(text) || "DITERUSKAN".equalsIgnoreCase(text)
+                        || "TTV_SELESAI".equalsIgnoreCase(text)) {
                     c.setForeground(UITheme.INFO);
                     setFont(UITheme.FONT_BOLD);
                 } else if (text.startsWith("Rp ")) {
