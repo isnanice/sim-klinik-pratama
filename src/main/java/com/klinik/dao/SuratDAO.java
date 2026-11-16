@@ -6,7 +6,6 @@ import com.klinik.model.JenisSurat;
 import com.klinik.model.StatusSurat;
 import com.klinik.model.Surat;
 import com.klinik.util.DatabaseConnection;
-import com.klinik.util.Jdbc;
 
 import java.sql.Connection;
 import java.sql.Date;
@@ -33,11 +32,7 @@ public class SuratDAO implements GenericDAO<Surat, String> {
     }
 
     public String generateNextId() {
-        try {
-            return Jdbc.nextId("SRT", "seq_surat");
-        } catch (SQLException e) {
-            throw Jdbc.toKlinikException(e, "Surat", null);
-        }
+        return Jdbc.idBerikut("SRT", "seq_surat");
     }
 
     /**
@@ -182,13 +177,13 @@ public class SuratDAO implements GenericDAO<Surat, String> {
         }
         surat.tandaiDiserahkan(diserahkanOleh);
 
-        String sql = "UPDATE surat SET status = 'DISERAHKAN', diserahkan_oleh = ? WHERE id_surat = ?";
+        String sql = "UPDATE surat SET status = 'DISERAHKAN', diserahkan_oleh = ? WHERE id_surat = ? AND status = 'DITERUSKAN'";
         try (Connection conn = DatabaseConnection.getConnection();
              PreparedStatement ps = conn.prepareStatement(sql)) {
             ps.setString(1, surat.getDiserahkanOleh());
             ps.setString(2, surat.getIdSurat());
-            if (ps.executeUpdate() == 0) {
-                throw new DataNotFoundException("Surat dengan ID " + idSurat + " tidak ditemukan.");
+            if (ps.executeUpdate() != 1) {
+                throw new DataTidakValidException("Status Surat", "Surat sudah diserahkan oleh pengguna lain.");
             }
             return surat;
         } catch (SQLException e) {
@@ -312,10 +307,10 @@ public class SuratDAO implements GenericDAO<Surat, String> {
                 JenisSurat.fromString(rs.getString("jenis")),
                 rs.getString("isi"),
                 jmlHari,
-                rs.getString("tujuan_rujukan"),
+                Jdbc.teks(rs, "tujuan_rujukan"),
                 tgl != null ? tgl.toLocalDate() : LocalDate.now(),
                 StatusSurat.fromString(rs.getString("status")),
-                rs.getString("diserahkan_oleh")
+                Jdbc.teks(rs, "diserahkan_oleh")
         );
     }
 }

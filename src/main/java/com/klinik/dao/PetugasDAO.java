@@ -6,7 +6,6 @@ import com.klinik.exception.DataTidakValidException;
 import com.klinik.model.Petugas;
 import com.klinik.model.Role;
 import com.klinik.util.DatabaseConnection;
-import com.klinik.util.Jdbc;
 import com.klinik.util.PasswordUtil;
 import com.klinik.util.PesanDb;
 
@@ -31,11 +30,7 @@ public class PetugasDAO implements GenericDAO<Petugas, String> {
     }
 
     public String generateNextId() {
-        try {
-            return Jdbc.nextId("PTG", "seq_petugas");
-        } catch (SQLException e) {
-            throw Jdbc.toKlinikException(e, "Petugas", null);
-        }
+        return Jdbc.idBerikut("PTG", "seq_petugas");
     }
 
     @Override
@@ -106,7 +101,7 @@ public class PetugasDAO implements GenericDAO<Petugas, String> {
     }
 
     /**
-     * BR-11: Menangkap pelanggaran ON DELETE RESTRICT (SQLState 23503) dan memetakannya ke DataMasihDipakaiException.
+     * BR-11: Menangkap pelanggaran ON DELETE RESTRICT (SQLState 23503 / 23001) dan memetakannya ke DataMasihDipakaiException.
      */
     @Override
     public void delete(String id) throws DataMasihDipakaiException {
@@ -255,13 +250,13 @@ public class PetugasDAO implements GenericDAO<Petugas, String> {
                 rs.getString("id_petugas"),
                 rs.getString("nama"),
                 null,
-                rs.getString("alamat"),
+                Jdbc.teks(rs, "alamat"),
                 rs.getString("no_telepon"),
                 rs.getBoolean("status_aktif"),
                 rs.getString("username"),
                 rs.getString("password_hash"),
                 Role.fromString(rs.getString("role")),
-                rs.getString("id_dokter")
+                Jdbc.teks(rs, "id_dokter")
         );
     }
 

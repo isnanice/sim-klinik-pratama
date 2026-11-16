@@ -5,7 +5,6 @@ import com.klinik.exception.DataNotFoundException;
 import com.klinik.model.JenisKelamin;
 import com.klinik.model.Pasien;
 import com.klinik.util.DatabaseConnection;
-import com.klinik.util.Jdbc;
 import com.klinik.util.PesanDb;
 
 import java.sql.Connection;
@@ -21,7 +20,7 @@ import java.util.Optional;
 /**
  * Data Access Object untuk entitas Pasien menggunakan JDBC PostgreSQL (tabel pasien).
  * Mengimplementasikan GenericDAO serta mendukung pencarian NIK/ID/Nama/BPJS, nonaktifkan pasien,
- * dan proteksi hapus permanen bila pasien memiliki riwayat pemeriksaan (ON DELETE RESTRICT / SQLState 23503).
+ * dan proteksi hapus permanen bila pasien memiliki riwayat pemeriksaan (ON DELETE RESTRICT / SQLState 23503 & 23001).
  */
 public class PasienDAO implements GenericDAO<Pasien, String> {
     private PemeriksaanDAO pemeriksaanDAO;
@@ -45,11 +44,7 @@ public class PasienDAO implements GenericDAO<Pasien, String> {
     }
 
     public String generateNextId() {
-        try {
-            return Jdbc.nextId("PSN", "seq_pasien");
-        } catch (SQLException e) {
-            throw Jdbc.toKlinikException(e, "Pasien", null);
-        }
+        return Jdbc.idBerikut("PSN", "seq_pasien");
     }
 
     @Override
@@ -130,7 +125,7 @@ public class PasienDAO implements GenericDAO<Pasien, String> {
 
     /**
      * BR-11: Menghapus pasien secara permanen.
-     * Menangkap pelanggaran ON DELETE RESTRICT (SQLState 23503) dari PostgreSQL dan memetakannya ke DataMasihDipakaiException.
+     * Menangkap pelanggaran ON DELETE RESTRICT (SQLState 23503 / 23001) dari PostgreSQL dan memetakannya ke DataMasihDipakaiException.
      */
     @Override
     public void delete(String id) throws DataMasihDipakaiException {
@@ -174,15 +169,15 @@ public class PasienDAO implements GenericDAO<Pasien, String> {
         if (pemeriksaanDAO != null && pemeriksaanDAO.existsByPasienId(pasienId.trim())) {
             return true;
         }
-        String sql = "SELECT 1 FROM pemeriksaan WHERE id_pasien = ? LIMIT 1";
+        String sql = "SELECT EXISTS (SELECT 1 FROM pemeriksaan WHERE id_pasien = ?)";
         try (Connection conn = DatabaseConnection.getConnection();
              PreparedStatement ps = conn.prepareStatement(sql)) {
             ps.setString(1, pasienId.trim());
             try (ResultSet rs = ps.executeQuery()) {
-                return rs.next();
+                return rs.next() && rs.getBoolean(1);
             }
         } catch (SQLException e) {
-            return false;
+            throw Jdbc.toKlinikException(e, "Pasien", pasienId);
         }
     }
 
@@ -218,20 +213,32 @@ public class PasienDAO implements GenericDAO<Pasien, String> {
         if (id == null || id.trim().isEmpty()) {
             return Optional.empty();
         }
-        String sql = "SELECT id_pasien, nik, no_bpjs, nama, jenis_kelamin, tanggal_lahir, alamat, no_telepon, tanggal_registrasi, status_aktif "
-                   + "FROM pasien WHERE id_pasien = ?";
-        try (Connection conn = DatabaseConnection.getConnection();
-             PreparedStatement ps = conn.prepareStatement(sql)) {
-            ps.setString(1, id.trim());
-            try (ResultSet rs = ps.executeQuery()) {
-                if (rs.next()) {
-                    return Optional.of(mapRow(rs));
-                }
-            }
+        try (Connection conn = DatabaseConnection.getConnection()) {
+            return Optional.ofNullable(muat(conn, id.trim()));
         } catch (SQLException e) {
             throw Jdbc.toKlinikException(e, "Pasien", id);
         }
-        return Optional.empty();
+    }
+
+    /**
+     * Dipakai DAO lain (mis. PemeriksaanDAO) agar satu operasi memakai satu koneksi.
+     * Mengembalikan null bila tidak ditemukan.
+     */
+    Pasien muat(Connection conn, String id) throws SQLException {
+        if (id == null || id.trim().isEmpty()) {
+            return null;
+        }
+        String sql = "SELECT id_pasien, nik, no_bpjs, nama, jenis_kelamin, tanggal_lahir, alamat, no_telepon, tanggal_registrasi, status_aktif "
+                   + "FROM pasien WHERE id_pasien = ?";
+        try (PreparedStatement ps = conn.prepareStatement(sql)) {
+            ps.setString(1, id.trim());
+            try (ResultSet rs = ps.executeQuery()) {
+                if (rs.next()) {
+                    return mapRow(rs);
+                }
+            }
+        }
+        return null;
     }
 
     public Optional<Pasien> findByNik(String nik) {
@@ -351,9 +358,9 @@ public class PasienDAO implements GenericDAO<Pasien, String> {
                 rs.getString("nama"),
                 JenisKelamin.fromString(rs.getString("jenis_kelamin")),
                 tglLahir != null ? tglLahir.toLocalDate() : null,
-                rs.getString("alamat"),
+                Jdbc.teks(rs, "alamat"),
                 rs.getString("no_telepon"),
-                rs.getString("no_bpjs"),
+                Jdbc.teks(rs, "no_bpjs"),
                 tglReg != null ? tglReg.toLocalDate() : LocalDate.now(),
                 rs.getBoolean("status_aktif")
         );

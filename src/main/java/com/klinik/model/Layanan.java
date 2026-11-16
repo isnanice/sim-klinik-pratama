@@ -81,6 +81,11 @@ public abstract class Layanan implements LayananMedis, DapatDicetak {
         return hitungTarif() + tambahan;
     }
 
+    /** Rincian tarif untuk tampilan. Subkelas menambahkan komponen biayanya sendiri (polimorfisme). */
+    public String rincianTarif() {
+        return "Tarif dasar " + formatRupiah(tarifDasar);
+    }
+
     public String formatRupiah(double nilai) {
         NumberFormat nf = NumberFormat.getInstance(new Locale("id", "ID"));
         return "Rp " + nf.format(Math.round(nilai));

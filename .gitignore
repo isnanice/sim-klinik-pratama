@@ -1,5 +1,3 @@
-# Maven build output
 target/
-
-# GitHub modernization temporary files
+db.properties
 .github/modernize/

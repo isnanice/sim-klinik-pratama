@@ -20,15 +20,15 @@ INSERT INTO dokter (id_dokter, nama, jenis_kelamin, alamat, no_telepon, nomor_re
 ('DKT-006', 'dr. Ani Wijaya',          'Perempuan', 'Jl. Cempaka No. 9, Bandung',     '081777889900', 'SIP-3204-2024-201', 'Umum',           TRUE);
 
 -- ---------------------------------------------------------------------
--- Akun login. password_hash = Base64(salt) ':' Base64(SHA-256(salt + password)), sama dengan PasswordUtil.
+-- Akun login. password_hash = salt(hex) ':' SHA-256(salt + password)(hex), persis format PasswordUtil.hashPassword().
 -- ---------------------------------------------------------------------
 INSERT INTO petugas (id_petugas, nama, alamat, no_telepon, username, password_hash, role, id_dokter, status_aktif) VALUES
 ('PTG-001', 'Siti Rahma',    'Jl. Asia Afrika No. 1, Bandung', '081100000001', 'admin',
- 'y8AHLucmS3OeYXRSFHr+Bw==:5BMIimWGEOEctPYKiUQ7ADrIMXtDHlEGpzrxB5VL3b0=', 'ADMIN',   NULL,      TRUE),
+ '84675585cb37df85016465de63822335:8f3bdb390a7c25602b4dc0b27141cb1c897b3802702da92106756788ac377900', 'ADMIN',   NULL,      TRUE),
 ('PTG-002', 'Rudi Hartono',  'Jl. Braga No. 2, Bandung',       '081100000002', 'petugas',
- 'Wtc/fGI/3MRocJ0FMU3J8Q==:EIdGRDu+eqMVh49j7x2xg0WRVzRuVoXLr1Lw40+2mqQ=', 'PETUGAS', NULL,      TRUE),
+ 'a4367203e444ad6212d5446d5f0a77b0:b9e173e77601f1ca5f110ba813bdb3e4c957fa3718f2c38b963cd9908b8a7d98', 'PETUGAS', NULL,      TRUE),
 ('PTG-003', 'dr. Ani Wijaya', 'Jl. Cempaka No. 9, Bandung',    '081777889900', 'dokter',
- 'tA+9KX0M/Ij8QAXLCaWD8A==:2CzEUooMtIcFq0Ruav+5aGEL/ZmWke+rcouguCUHhj0=', 'DOKTER',  'DKT-006', TRUE);
+ '93845b4d04a8f65f52cdb831e898db12:2a57640d4cabcc98961bbe652e1fd444b0058e489956bef04cfe7fdfc15a7ec0', 'DOKTER',  'DKT-006', TRUE);
 
 -- ---------------------------------------------------------------------
 -- Layanan (tarif dasar; layanan SPESIALIS ditambah biaya konsultasi di kode Java)

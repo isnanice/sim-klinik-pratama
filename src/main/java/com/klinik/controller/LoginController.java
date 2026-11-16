@@ -3,7 +3,9 @@ package com.klinik.controller;
 import com.klinik.dao.DokterDAO;
 import com.klinik.dao.LayananDAO;
 import com.klinik.dao.PasienDAO;
+import com.klinik.dao.PembayaranDAO;
 import com.klinik.dao.PemeriksaanDAO;
+import com.klinik.dao.RekamMedisDAO;
 import com.klinik.dao.PetugasDAO;
 import com.klinik.dao.SuratDAO;
 import com.klinik.exception.DataNotFoundException;
@@ -99,12 +101,21 @@ public class LoginController {
         PasienController pasienController = new PasienController(pasienDAO, pemeriksaanDAO);
         SuratController suratController = new SuratController(suratDAO, pemeriksaanDAO);
 
+        RekamMedisDAO rekamMedisDAO = new RekamMedisDAO(pemeriksaanDAO);
+        PembayaranDAO pembayaranDAO = new PembayaranDAO(pemeriksaanDAO);
+        PemeriksaanController pemeriksaanController = new PemeriksaanController(
+                pemeriksaanDAO, rekamMedisDAO, pasienDAO, dokterDAO, layananDAO);
+        RekamMedisController rekamMedisController = new RekamMedisController(rekamMedisDAO, pemeriksaanController);
+        PembayaranController pembayaranController = new PembayaranController(pembayaranDAO, pemeriksaanDAO);
+
         MainFrame mainFrame = new MainFrame(
                 dokterController,
                 layananController,
                 pasienController,
                 suratController,
-                pemeriksaanDAO,
+                pemeriksaanController,
+                rekamMedisController,
+                pembayaranController,
                 this
         );
         mainFrame.setVisible(true);
