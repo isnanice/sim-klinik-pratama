@@ -1,145 +1,168 @@
 package com.klinik.dao;
 
-import com.klinik.model.*;
+import com.klinik.exception.DataTidakValidException;
+import com.klinik.model.MetodePembayaran;
+import com.klinik.model.Pembayaran;
+import com.klinik.model.StatusPembayaran;
 
-import java.io.*;
-import java.time.LocalDate;
-import java.util.*;
-import java.util.stream.Collectors;
+import java.sql.Connection;
+import java.sql.Date;
+import java.sql.PreparedStatement;
+import java.sql.ResultSet;
+import java.sql.SQLException;
+import java.sql.Types;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Optional;
 
 /**
- * Data Access Object untuk entitas Pembayaran dengan persistensi file teks/CSV.
+ * DAO pembayaran di PostgreSQL. Penyimpanan pembayaran memakai satu transaksi (BR-12):
+ * kunjungan dikunci (FOR UPDATE), status SELESAI dan belum pernah dibayar diperiksa ulang,
+ * lalu pembayaran disimpan; commit bila semua berhasil, rollback bila ada yang gagal.
  */
 public class PembayaranDAO implements GenericDAO<Pembayaran, String> {
-    private static final String DEFAULT_DATA_DIR = "data";
-    private final String dataDir;
-    private final String filePath;
-    private final Map<String, Pembayaran> storage = new LinkedHashMap<>();
+
+    private static final String SELECT_DASAR =
+            "SELECT id_pembayaran, id_pemeriksaan, tanggal_pembayaran, biaya_tambahan, total_biaya, "
+          + "metode_pembayaran, status_pembayaran FROM pembayaran ";
+
+    static final String SQL_SEMUA          = SELECT_DASAR + "ORDER BY tanggal_pembayaran DESC, id_pembayaran DESC";
+    static final String SQL_BY_ID          = SELECT_DASAR + "WHERE id_pembayaran = ?";
+    static final String SQL_BY_PEMERIKSAAN = SELECT_DASAR + "WHERE id_pemeriksaan = ?";
+    static final String SQL_KUNCI_KUNJUNGAN =
+            "SELECT status FROM pemeriksaan WHERE id_pemeriksaan = ? FOR UPDATE";
+    static final String SQL_SUDAH_DIBAYAR  = "SELECT EXISTS (SELECT 1 FROM pembayaran WHERE id_pemeriksaan = ?)";
+    static final String SQL_INSERT =
+            "INSERT INTO pembayaran (id_pembayaran, id_pemeriksaan, tanggal_pembayaran, biaya_tambahan, total_biaya, "
+          + "metode_pembayaran, status_pembayaran) "
+          + "VALUES (COALESCE(?, fn_id('BYR', nextval('seq_pembayaran'))), ?, ?, ?, ?, ?, ?) RETURNING id_pembayaran";
+    static final String SQL_UPDATE =
+            "UPDATE pembayaran SET metode_pembayaran = ?, status_pembayaran = ? WHERE id_pembayaran = ?";
+    static final String SQL_DELETE = "DELETE FROM pembayaran WHERE id_pembayaran = ?";
+
     private final PemeriksaanDAO pemeriksaanDAO;
-    private int counter = 0;
 
     public PembayaranDAO(PemeriksaanDAO pemeriksaanDAO) {
-        this(pemeriksaanDAO, System.getProperty("klinik.data.dir", DEFAULT_DATA_DIR));
-    }
-
-    public PembayaranDAO(PemeriksaanDAO pemeriksaanDAO, String dataDir) {
         this.pemeriksaanDAO = pemeriksaanDAO;
-        this.dataDir = (dataDir != null && !dataDir.trim().isEmpty()) ? dataDir.trim() : DEFAULT_DATA_DIR;
-        this.filePath = this.dataDir + File.separator + "pembayaran.txt";
-        initStorage();
     }
 
-    private void initStorage() {
-        File dir = new File(dataDir);
-        if (!dir.exists()) dir.mkdirs();
-        File file = new File(filePath);
-        if (file.exists()) {
-            loadFromFile();
-        } else {
-            saveToFile();
-        }
+    public String generateNextId() {
+        return Jdbc.idBerikut("BYR", "seq_pembayaran");
     }
 
-    public synchronized String generateNextId() {
-        counter++;
-        return String.format("BYR-%03d", counter);
-    }
-
-    private void updateCounterFromId(String id) {
-        if (id != null && id.startsWith("BYR-")) {
+    /** BR-12: transaksi tunggal (setAutoCommit(false), commit atau rollback). */
+    @Override
+    public void insert(Pembayaran b) {
+        try (Connection c = Jdbc.buka()) {
+            c.setAutoCommit(false);
             try {
-                int val = Integer.parseInt(id.substring(4));
-                if (val > counter) counter = val;
-            } catch (NumberFormatException ignored) {}
-        }
-    }
-
-    @Override
-    public synchronized void insert(Pembayaran entity) {
-        if (entity.getId() == null || entity.getId().trim().isEmpty()) {
-            entity.setId(generateNextId());
-        } else {
-            updateCounterFromId(entity.getId());
-        }
-        storage.put(entity.getId(), entity);
-        saveToFile();
-    }
-
-    @Override
-    public synchronized void update(Pembayaran entity) {
-        if (entity != null && entity.getId() != null) {
-            storage.put(entity.getId(), entity);
-            saveToFile();
-        }
-    }
-
-    @Override
-    public synchronized void delete(String id) {
-        storage.remove(id);
-        saveToFile();
-    }
-
-    @Override
-    public synchronized Optional<Pembayaran> findById(String id) {
-        return Optional.ofNullable(storage.get(id));
-    }
-
-    @Override
-    public synchronized List<Pembayaran> findAll() {
-        return new ArrayList<>(storage.values());
-    }
-
-    public synchronized Optional<Pembayaran> findByPemeriksaanId(String idPemeriksaan) {
-        if (idPemeriksaan == null) return Optional.empty();
-        return storage.values().stream()
-                .filter(b -> b.getPemeriksaan() != null && idPemeriksaan.equalsIgnoreCase(b.getPemeriksaan().getId()))
-                .findFirst();
-    }
-
-    private synchronized void saveToFile() {
-        try (PrintWriter writer = new PrintWriter(new FileWriter(filePath))) {
-            for (Pembayaran b : storage.values()) {
-                String line = String.join("|",
-                        b.getId() != null ? b.getId() : "",
-                        (b.getPemeriksaan() != null && b.getPemeriksaan().getId() != null) ? b.getPemeriksaan().getId() : "",
-                        b.getTanggalPembayaran() != null ? b.getTanggalPembayaran().toString() : "",
-                        String.valueOf(b.getBiayaTambahan()),
-                        String.valueOf(b.getTotalBiaya()),
-                        b.getMetodePembayaran() != null ? b.getMetodePembayaran().name() : "",
-                        b.getStatusPembayaran() != null ? b.getStatusPembayaran().name() : ""
-                );
-                writer.println(line);
+                String idPemeriksaan = b.getPemeriksaan().getId();
+                try (PreparedStatement ps = c.prepareStatement(SQL_KUNCI_KUNJUNGAN)) {
+                    ps.setString(1, idPemeriksaan);
+                    try (ResultSet rs = ps.executeQuery()) {
+                        if (!rs.next() || !"SELESAI".equals(rs.getString(1))) {
+                            throw new DataTidakValidException("Status Pemeriksaan",
+                                    "Pembayaran hanya dapat diproses untuk pemeriksaan yang berstatus SELESAI.");
+                        }
+                    }
+                }
+                try (PreparedStatement ps = c.prepareStatement(SQL_SUDAH_DIBAYAR)) {
+                    ps.setString(1, idPemeriksaan);
+                    try (ResultSet rs = ps.executeQuery()) {
+                        if (rs.next() && rs.getBoolean(1)) {
+                            throw new DataTidakValidException("Pembayaran", "Pemeriksaan ini sudah memiliki data pembayaran.");
+                        }
+                    }
+                }
+                try (PreparedStatement ps = c.prepareStatement(SQL_INSERT)) {
+                    if (b.getId() == null || b.getId().trim().isEmpty()) {
+                        ps.setNull(1, Types.VARCHAR);
+                    } else {
+                        ps.setString(1, b.getId().trim());
+                    }
+                    ps.setString(2, idPemeriksaan);
+                    ps.setDate(3, Date.valueOf(b.getTanggalPembayaran()));
+                    ps.setDouble(4, b.getBiayaTambahan());
+                    ps.setDouble(5, b.getTotalBiaya());
+                    ps.setString(6, b.getMetodePembayaran().name());
+                    ps.setString(7, b.getStatusPembayaran().name());
+                    try (ResultSet rs = ps.executeQuery()) {
+                        rs.next();
+                        b.setId(rs.getString(1));
+                    }
+                }
+                c.commit();
+            } catch (SQLException | RuntimeException e) {
+                c.rollback();
+                throw e;
             }
-        } catch (IOException e) {
-            System.err.println("Gagal menyimpan pembayaran: " + e.getMessage());
+        } catch (SQLException e) {
+            throw Jdbc.gagal(e);
         }
     }
 
-    private synchronized void loadFromFile() {
-        storage.clear();
-        try (BufferedReader reader = new BufferedReader(new FileReader(filePath))) {
-            String line;
-            while ((line = reader.readLine()) != null) {
-                if (line.trim().isEmpty()) continue;
-                String[] parts = line.split("\\|", -1);
-                if (parts.length >= 7) {
-                    String id = parts[0];
-                    String idPemeriksaan = parts[1];
-                    LocalDate tgl = parts[2].isEmpty() ? LocalDate.now() : LocalDate.parse(parts[2]);
-                    double tambahan = Double.parseDouble(parts[3]);
-                    double total = Double.parseDouble(parts[4]);
-                    MetodePembayaran metode = MetodePembayaran.fromString(parts[5]);
-                    StatusPembayaran status = StatusPembayaran.fromString(parts[6]);
+    /** Mengubah metode dan status. Trigger database menolak perubahan pada pembayaran yang sudah LUNAS. */
+    @Override
+    public void update(Pembayaran b) {
+        try (Connection c = Jdbc.buka(); PreparedStatement ps = c.prepareStatement(SQL_UPDATE)) {
+            ps.setString(1, b.getMetodePembayaran().name());
+            ps.setString(2, b.getStatusPembayaran().name());
+            ps.setString(3, b.getId());
+            ps.executeUpdate();
+        } catch (SQLException e) {
+            throw Jdbc.gagal(e);
+        }
+    }
 
-                    Pemeriksaan pemeriksaan = pemeriksaanDAO.findById(idPemeriksaan).orElse(null);
-                    Pembayaran b = new Pembayaran(id, pemeriksaan, tgl, tambahan, total, metode, status);
-                    storage.put(id, b);
-                    updateCounterFromId(id);
+    @Override
+    public void delete(String id) {
+        try (Connection c = Jdbc.buka(); PreparedStatement ps = c.prepareStatement(SQL_DELETE)) {
+            ps.setString(1, id);
+            ps.executeUpdate();
+        } catch (SQLException e) {
+            throw Jdbc.gagal(e);
+        }
+    }
+
+    @Override
+    public Optional<Pembayaran> findById(String id) {
+        return satu(SQL_BY_ID, id);
+    }
+
+    public Optional<Pembayaran> findByPemeriksaanId(String idPemeriksaan) {
+        return satu(SQL_BY_PEMERIKSAAN, idPemeriksaan);
+    }
+
+    @Override
+    public List<Pembayaran> findAll() {
+        return daftar(SQL_SEMUA, null);
+    }
+
+    private Optional<Pembayaran> satu(String sql, String id) {
+        if (id == null || id.trim().isEmpty()) return Optional.empty();
+        List<Pembayaran> hasil = daftar(sql, id.trim());
+        return hasil.isEmpty() ? Optional.empty() : Optional.of(hasil.get(0));
+    }
+
+    private List<Pembayaran> daftar(String sql, String parameter) {
+        try (Connection c = Jdbc.buka(); PreparedStatement ps = c.prepareStatement(sql)) {
+            if (parameter != null) ps.setString(1, parameter);
+            List<Pembayaran> hasil = new ArrayList<>();
+            try (ResultSet rs = ps.executeQuery()) {
+                while (rs.next()) {
+                    hasil.add(new Pembayaran(
+                            rs.getString("id_pembayaran"),
+                            pemeriksaanDAO.findById(c, rs.getString("id_pemeriksaan")).orElse(null),
+                            Jdbc.tanggal(rs, "tanggal_pembayaran"),
+                            rs.getDouble("biaya_tambahan"),
+                            rs.getDouble("total_biaya"),
+                            MetodePembayaran.fromString(rs.getString("metode_pembayaran")),
+                            StatusPembayaran.fromString(rs.getString("status_pembayaran"))));
                 }
             }
-        } catch (Exception e) {
-            System.err.println("Gagal memuat pembayaran: " + e.getMessage());
+            return hasil;
+        } catch (SQLException e) {
+            throw Jdbc.gagal(e);
         }
     }
 }
-

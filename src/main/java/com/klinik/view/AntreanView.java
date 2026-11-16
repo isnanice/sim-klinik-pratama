@@ -1,12 +1,12 @@
 package com.klinik.view;
 
-import com.klinik.dao.PemeriksaanDAO;
+import com.klinik.controller.PemeriksaanController;
 import com.klinik.exception.AksesDitolakException;
+import com.klinik.exception.DatabaseException;
 import com.klinik.exception.DataNotFoundException;
 import com.klinik.exception.DataTidakValidException;
 import com.klinik.model.Pemeriksaan;
 import com.klinik.model.StatusPemeriksaan;
-import com.klinik.util.HakAkses;
 import com.klinik.view.component.TableStyleHelper;
 import com.klinik.view.theme.UITheme;
 
@@ -28,34 +28,31 @@ import java.awt.Dimension;
 import java.awt.FlowLayout;
 import java.time.format.DateTimeFormatter;
 import java.util.List;
-import java.util.stream.Collectors;
 
 /**
  * Tampilan Antrean Pemeriksaan per Tahap.
- * Terhubung ke PemeriksaanDAO eksisting dengan menerapkan HakAkses serta aturan BR-14 & BR-15:
+ * Terhubung ke PemeriksaanController (satu-satunya pengubah status, PRD bagian 16) dengan aturan BR-14 & BR-15:
  * - Tombol Panggil menambah hitungan jumlahPanggilan.
  * - Tombol Batalkan meminta konfirmasi dan hanya mengizinkan pembatalan apabila jumlahPanggilan >= 3 serta alasan diisi.
  */
 public class AntreanView extends JPanel {
     private static final DateTimeFormatter FORMAT_TANGGAL = DateTimeFormatter.ofPattern("dd-MM-yyyy");
 
-    private final PemeriksaanDAO pemeriksaanDAO;
+    private final PemeriksaanController pemeriksaanController;
 
     private JComboBox<String> cmbFilterStatus;
-    private JComboBox<StatusPemeriksaan> cmbUbahTahap;
     private JTextArea txtAlasanBatal;
 
     private JButton btnPanggil;
     private JButton btnBatalkan;
-    private JButton btnUbahTahap;
     private JButton btnDetail;
     private JButton btnRefresh;
 
     private JTable tblAntrean;
     private DefaultTableModel tableModel;
 
-    public AntreanView(PemeriksaanDAO pemeriksaanDAO) {
-        this.pemeriksaanDAO = pemeriksaanDAO;
+    public AntreanView(PemeriksaanController pemeriksaanController) {
+        this.pemeriksaanController = pemeriksaanController;
         initComponents();
         pasangListener();
         refreshTable();
@@ -91,7 +88,7 @@ public class AntreanView extends JPanel {
         controlCard.setBackground(UITheme.SURFACE);
         controlCard.setBorder(UITheme.createPanelBorder());
 
-        // Baris Atas Kontrol: Filter Tahap & Ubah Tahap
+        // Baris Atas Kontrol: Filter Tahap (status hanya maju lewat pengisian tiap tahap, bukan dari sini)
         JPanel topRow = new JPanel(new BorderLayout(8, 8));
         topRow.setOpaque(false);
 
@@ -102,11 +99,8 @@ public class AntreanView extends JPanel {
         cmbFilterStatus = new JComboBox<>(new String[]{
                 "Semua Tahap",
                 StatusPemeriksaan.TERDAFTAR.name(),
-                StatusPemeriksaan.MENUNGGU_TTV.name(),
                 StatusPemeriksaan.TTV_SELESAI.name(),
-                StatusPemeriksaan.MENUNGGU_DOKTER.name(),
                 StatusPemeriksaan.DIPERIKSA.name(),
-                StatusPemeriksaan.MENUNGGU_OBAT.name(),
                 StatusPemeriksaan.SELESAI.name(),
                 StatusPemeriksaan.DIBATALKAN.name()
         });
@@ -118,26 +112,6 @@ public class AntreanView extends JPanel {
         filterPanel.add(cmbFilterStatus);
         filterPanel.add(btnRefresh);
         topRow.add(filterPanel, BorderLayout.WEST);
-
-        JPanel stagePanel = new JPanel(new FlowLayout(FlowLayout.RIGHT, 8, 0));
-        stagePanel.setOpaque(false);
-        JLabel lblStage = new JLabel("Ubah Tahap ke:");
-        lblStage.setFont(UITheme.FONT_REGULAR);
-        cmbUbahTahap = new JComboBox<>(new StatusPemeriksaan[]{
-                StatusPemeriksaan.MENUNGGU_TTV,
-                StatusPemeriksaan.TTV_SELESAI,
-                StatusPemeriksaan.MENUNGGU_DOKTER,
-                StatusPemeriksaan.DIPERIKSA,
-                StatusPemeriksaan.MENUNGGU_OBAT,
-                StatusPemeriksaan.SELESAI
-        });
-        cmbUbahTahap.setFont(UITheme.FONT_REGULAR);
-        cmbUbahTahap.setPreferredSize(new Dimension(170, 30));
-        btnUbahTahap = UITheme.createSecondaryButton("Perbarui Tahap");
-        stagePanel.add(lblStage);
-        stagePanel.add(cmbUbahTahap);
-        stagePanel.add(btnUbahTahap);
-        topRow.add(stagePanel, BorderLayout.EAST);
 
         // Baris Bawah Kontrol: Tombol Panggil, JTextArea Alasan Pembatalan + JScrollPane, Tombol Batalkan
         JPanel bottomRow = new JPanel(new BorderLayout(8, 8));
@@ -202,7 +176,6 @@ public class AntreanView extends JPanel {
         btnRefresh.addActionListener(e -> refreshTable());
         btnPanggil.addActionListener(e -> panggilPasienTerpilih());
         btnBatalkan.addActionListener(e -> batalkanPasienTerpilih());
-        btnUbahTahap.addActionListener(e -> ubahTahapTerpilih());
         btnDetail.addActionListener(e -> tampilkanDetailTerpilih());
 
         tblAntrean.getSelectionModel().addListSelectionListener(e -> {
@@ -219,18 +192,17 @@ public class AntreanView extends JPanel {
     }
 
     public void refreshTable() {
-        if (pemeriksaanDAO == null) return;
+        if (pemeriksaanController == null) return;
         String selectedFilter = (String) cmbFilterStatus.getSelectedItem();
-        List<Pemeriksaan> list = pemeriksaanDAO.findAll();
-        if (selectedFilter != null && !"Semua Tahap".equalsIgnoreCase(selectedFilter)) {
-            StatusPemeriksaan st = StatusPemeriksaan.fromString(selectedFilter);
-            if (st != null) {
-                list = list.stream()
-                        .filter(p -> p.getStatus() == st)
-                        .collect(Collectors.toList());
-            }
+        try {
+            StatusPemeriksaan st = (selectedFilter == null || "Semua Tahap".equalsIgnoreCase(selectedFilter))
+                    ? null : StatusPemeriksaan.fromString(selectedFilter);
+            populateTable(pemeriksaanController.kunjunganPerTahap(st));
+        } catch (AksesDitolakException e) {
+            JOptionPane.showMessageDialog(this, e.getMessage(), "Akses Ditolak", JOptionPane.ERROR_MESSAGE);
+        } catch (DatabaseException e) {
+            JOptionPane.showMessageDialog(this, e.getMessage(), "Kesalahan Database", JOptionPane.ERROR_MESSAGE);
         }
-        populateTable(list);
     }
 
     private void populateTable(List<Pemeriksaan> list) {
@@ -264,15 +236,14 @@ public class AntreanView extends JPanel {
         String id = getSelectedPemeriksaanId();
         if (id == null) return;
         try {
-            HakAkses.periksaAkses(HakAkses.KELOLA_ANTREAN);
-            Pemeriksaan p = pemeriksaanDAO.panggilAntrean(id);
+            Pemeriksaan p = pemeriksaanController.panggil(id);
             String namaPasien = p.getPasien() != null ? p.getPasien().getNama() : id;
             JOptionPane.showMessageDialog(this,
                     "Memanggil antrean " + p.getNomorAntreanPoli() + " - " + namaPasien
                             + "\nTotal panggilan saat ini: " + p.getJumlahPanggilan() + " kali.",
                     "Panggilan Antrean", JOptionPane.INFORMATION_MESSAGE);
             refreshTable();
-        } catch (DataTidakValidException | DataNotFoundException e) {
+        } catch (DataTidakValidException | DataNotFoundException | DatabaseException e) {
             JOptionPane.showMessageDialog(this, e.getMessage(), "Validasi Gagal", JOptionPane.WARNING_MESSAGE);
         } catch (AksesDitolakException e) {
             JOptionPane.showMessageDialog(this, e.getMessage(), "Akses Ditolak", JOptionPane.ERROR_MESSAGE);
@@ -289,41 +260,14 @@ public class AntreanView extends JPanel {
             return;
         }
         try {
-            HakAkses.periksaAkses(HakAkses.KELOLA_ANTREAN);
             String alasan = txtAlasanBatal.getText().trim();
-            Pemeriksaan p = pemeriksaanDAO.batalkanAntrean(id, alasan);
+            Pemeriksaan p = pemeriksaanController.batalkan(id, alasan);
             txtAlasanBatal.setText("");
             JOptionPane.showMessageDialog(this,
                     "Antrean " + p.getNomorAntreanPoli() + " (" + p.getId() + ") berhasil dibatalkan.\nAlasan: " + p.getAlasanBatal(),
                     "Pembatalan Berhasil", JOptionPane.INFORMATION_MESSAGE);
             refreshTable();
-        } catch (DataTidakValidException | DataNotFoundException e) {
-            JOptionPane.showMessageDialog(this, e.getMessage(), "Validasi Gagal", JOptionPane.WARNING_MESSAGE);
-        } catch (AksesDitolakException e) {
-            JOptionPane.showMessageDialog(this, e.getMessage(), "Akses Ditolak", JOptionPane.ERROR_MESSAGE);
-        }
-    }
-
-    private void ubahTahapTerpilih() {
-        String id = getSelectedPemeriksaanId();
-        if (id == null) return;
-        try {
-            HakAkses.periksaAkses(HakAkses.KELOLA_ANTREAN);
-            Pemeriksaan p = pemeriksaanDAO.findById(id)
-                    .orElseThrow(() -> new DataNotFoundException("Pemeriksaan " + id + " tidak ditemukan."));
-            if (p.getStatus() == StatusPemeriksaan.DIBATALKAN) {
-                throw new DataTidakValidException("Status", "Antrean yang sudah DIBATALKAN tidak dapat diubah tahapnya.");
-            }
-            StatusPemeriksaan target = (StatusPemeriksaan) cmbUbahTahap.getSelectedItem();
-            if (target != null) {
-                p.setStatus(target);
-                pemeriksaanDAO.update(p);
-                JOptionPane.showMessageDialog(this,
-                        "Status tahap antrean " + p.getId() + " diperbarui menjadi: " + target.getLabel(),
-                        "Sukses", JOptionPane.INFORMATION_MESSAGE);
-                refreshTable();
-            }
-        } catch (DataTidakValidException | DataNotFoundException e) {
+        } catch (DataTidakValidException | DataNotFoundException | DatabaseException e) {
             JOptionPane.showMessageDialog(this, e.getMessage(), "Validasi Gagal", JOptionPane.WARNING_MESSAGE);
         } catch (AksesDitolakException e) {
             JOptionPane.showMessageDialog(this, e.getMessage(), "Akses Ditolak", JOptionPane.ERROR_MESSAGE);
@@ -333,6 +277,11 @@ public class AntreanView extends JPanel {
     private void tampilkanDetailTerpilih() {
         String id = getSelectedPemeriksaanId();
         if (id == null) return;
-        pemeriksaanDAO.findById(id).ifPresent(p -> DetailDialog.show(this, "Detail Antrean Pemeriksaan", p));
+        try {
+            pemeriksaanController.cariKunjungan(id)
+                    .ifPresent(p -> DetailDialog.show(this, "Detail Antrean Pemeriksaan", p));
+        } catch (AksesDitolakException | DatabaseException e) {
+            JOptionPane.showMessageDialog(this, e.getMessage(), "Gagal", JOptionPane.ERROR_MESSAGE);
+        }
     }
 }

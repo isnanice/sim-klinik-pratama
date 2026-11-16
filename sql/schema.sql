@@ -61,7 +61,7 @@ CREATE TABLE petugas (
     CONSTRAINT chk_petugas_nama      CHECK (btrim(nama) <> ''),
     CONSTRAINT chk_petugas_telepon   CHECK (no_telepon ~ '^(08|\+628)[0-9]{8,11}$'),
     CONSTRAINT chk_petugas_username  CHECK (username ~ '^[A-Za-z0-9._-]{3,50}$'),
-    -- format hasil PasswordUtil: Base64(salt) ':' Base64(SHA-256). Mencegah password polos tersimpan.
+    -- format hasil PasswordUtil: salt(hex) ':' SHA-256(hex). Mencegah password polos tersimpan.
     CONSTRAINT chk_petugas_password  CHECK (password_hash ~ '^[A-Za-z0-9+/=]+:[A-Za-z0-9+/=]+$'),
     CONSTRAINT chk_petugas_role      CHECK (role IN ('ADMIN', 'PETUGAS', 'DOKTER')),
     -- id_dokter hanya terisi untuk role DOKTER, dan wajib terisi untuk role itu
@@ -265,6 +265,10 @@ BEGIN
                 OR (OLD.status = 'TTV_SELESAI' AND NEW.status IN ('DIPERIKSA',   'DIBATALKAN'))
                 OR (OLD.status = 'DIPERIKSA'   AND NEW.status IN ('SELESAI',     'DIBATALKAN'))) THEN
             RAISE EXCEPTION 'BR-08: Status kunjungan tidak boleh berubah dari % ke %.', OLD.status, NEW.status;
+        END IF;
+        IF NEW.status = 'DIBATALKAN' AND NEW.jumlah_panggilan < 3 THEN
+            RAISE EXCEPTION 'BR-14: Kunjungan baru dapat dibatalkan setelah pasien dipanggil minimal 3 kali (baru % kali).',
+                NEW.jumlah_panggilan;
         END IF;
         IF NEW.status <> 'DIBATALKAN' THEN
             NEW.jumlah_panggilan := 0;

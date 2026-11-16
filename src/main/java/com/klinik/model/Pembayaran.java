@@ -1,5 +1,7 @@
 package com.klinik.model;
 
+import com.klinik.exception.DataTidakValidException;
+
 import java.text.NumberFormat;
 import java.time.LocalDate;
 import java.time.format.DateTimeFormatter;
@@ -65,6 +67,9 @@ public class Pembayaran implements DapatDicetak {
     }
 
     public void setBiayaTambahan(double biayaTambahan) {
+        if (biayaTambahan < 0) {
+            throw new DataTidakValidException("Biaya Tambahan", "Biaya tambahan tidak boleh negatif.");
+        }
         this.biayaTambahan = biayaTambahan;
     }
 
@@ -73,6 +78,9 @@ public class Pembayaran implements DapatDicetak {
     }
 
     public void setTotalBiaya(double totalBiaya) {
+        if (totalBiaya < 0) {
+            throw new DataTidakValidException("Total Biaya", "Total biaya tidak boleh negatif.");
+        }
         this.totalBiaya = totalBiaya;
     }
 
@@ -90,6 +98,17 @@ public class Pembayaran implements DapatDicetak {
 
     public void setStatusPembayaran(StatusPembayaran statusPembayaran) {
         this.statusPembayaran = statusPembayaran;
+    }
+
+    /** BR-10: pembayaran yang sudah LUNAS terkunci dan tidak dapat diubah lagi. */
+    public void ubahStatus(StatusPembayaran statusBaru) throws DataTidakValidException {
+        if (statusBaru == null) {
+            throw new DataTidakValidException("Status Pembayaran", "Status pembayaran tidak boleh kosong.");
+        }
+        if (this.statusPembayaran == StatusPembayaran.LUNAS) {
+            throw new DataTidakValidException("Status Pembayaran", "Pembayaran yang sudah LUNAS tidak dapat diubah lagi.");
+        }
+        this.statusPembayaran = statusBaru;
     }
 
     public static String formatRupiah(double nilai) {
