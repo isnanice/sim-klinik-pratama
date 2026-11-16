@@ -1,0 +1,3 @@
+PMR-001|P-001|PSN-001|DKT-001|LYN-001|2026-11-16|Demam dan batuk pilek|petugas01|SELESAI|1|
+PMR-002|P-002|PSN-002|DKT-002|LYN-003|2026-11-16|Nyeri lambung kronis|petugas01|DIPERIKSA|1|
+PMR-003|P-003|PSN-003|DKT-001|LYN-001|2026-11-16|Pusing dan lemas sejak 2 hari|petugas01|TTV_SELESAI|1|
