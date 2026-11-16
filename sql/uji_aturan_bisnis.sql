@@ -1,8 +1,8 @@
 -- uji_aturan_bisnis.sql
--- Menguji aturan bisnis yang dijaga database (PRD bagian 12: pengujian 6, 7, 8, 10).
+-- Menguji seluruh aturan bisnis, constraint, dan trigger yang dijaga database PostgreSQL (db_klinik_pratama)
+-- mencakup Cakupan Anggota 1 (Petugas, Pasien, Surat) serta Anggota 2 & 3 (Pemeriksaan, Rekam Medis, Pembayaran).
 -- Jalankan SETELAH schema.sql + seed.sql:  psql -U klinik_user -d db_klinik_pratama -f sql/uji_aturan_bisnis.sql
--- Seluruh skenario dibungkus transaksi dan di-ROLLBACK, jadi data tidak berubah.
--- Tiap baris hasil diawali LULUS atau GAGAL.
+-- Seluruh skenario dibungkus transaksi dan di-ROLLBACK di akhir, sehingga data seed/utama tidak berubah.
 
 \set ON_ERROR_STOP off
 \pset tuples_only on
@@ -27,6 +27,66 @@ BEGIN
 EXCEPTION WHEN OTHERS THEN
     INSERT INTO hasil(uji, status) VALUES (nama, 'GAGAL (' || left(SQLERRM, 80) || ')');
 END $$;
+
+-- =====================================================================
+-- BAGIAN A (ANGGOTA 1): PETUGAS, PASIEN, DAN SURAT (13 Skenario)
+-- =====================================================================
+
+-- 1. Tabel petugas (uq_petugas_username, chk_petugas_password, chk_petugas_id_dokter, ON DELETE RESTRICT)
+SELECT pg_temp.harus_ditolak('petugas: username duplikat ditolak (uq_petugas_username)',
+ $q$INSERT INTO petugas (nama, no_telepon, username, password_hash, role, id_dokter, status_aktif)
+    VALUES ('Duplikat Admin', '081234567890', 'admin', 'y8AHLucmS3OeYXRSFHr+Bw==:5BMIimWGEOEctPYKiUQ7ADrIMXtDHlEGpzrxB5VL3b0=', 'ADMIN', NULL, TRUE)$q$);
+
+SELECT pg_temp.harus_ditolak('petugas: password polos tanpa salt:hash ditolak (chk_petugas_password)',
+ $q$INSERT INTO petugas (nama, no_telepon, username, password_hash, role, id_dokter, status_aktif)
+    VALUES ('Petugas Polos', '081234567890', 'ptg_polos', 'password123', 'PETUGAS', NULL, TRUE)$q$);
+
+SELECT pg_temp.harus_ditolak('petugas: role DOKTER tanpa id_dokter ditolak (chk_petugas_id_dokter)',
+ $q$INSERT INTO petugas (nama, no_telepon, username, password_hash, role, id_dokter, status_aktif)
+    VALUES ('Dokter Tanpa ID', '081234567890', 'dokter_tanpa_id', 'y8AHLucmS3OeYXRSFHr+Bw==:5BMIimWGEOEctPYKiUQ7ADrIMXtDHlEGpzrxB5VL3b0=', 'DOKTER', NULL, TRUE)$q$);
+
+SELECT pg_temp.harus_ditolak('petugas: hapus petugas yang punya riwayat pemeriksaan ditolak (BR-11)',
+ $q$DELETE FROM petugas WHERE id_petugas = 'PTG-002'$q$);
+
+-- 2. Tabel pasien (chk_pasien_nik, chk_pasien_bpjs BR-13, chk_pasien_lahir BR-05, ON DELETE RESTRICT BR-11)
+SELECT pg_temp.harus_ditolak('pasien: NIK kurang dari 16 digit ditolak (chk_pasien_nik)',
+ $q$INSERT INTO pasien (nik, no_bpjs, nama, jenis_kelamin, tanggal_lahir, alamat, no_telepon)
+    VALUES ('12345', NULL, 'Pasien NIK Pendek', 'Laki-laki', DATE '1999-01-01', 'Bandung', '081234567890')$q$);
+
+SELECT pg_temp.harus_ditolak('pasien: nomor BPJS bukan 13 digit ditolak (BR-13 / chk_pasien_bpjs)',
+ $q$INSERT INTO pasien (nik, no_bpjs, nama, jenis_kelamin, tanggal_lahir, alamat, no_telepon)
+    VALUES ('3273019999999991', '123456789', 'Pasien BPJS Salah', 'Perempuan', DATE '1998-05-10', 'Bandung', '081234567890')$q$);
+
+SELECT pg_temp.harus_ditolak('pasien: tanggal lahir di masa depan ditolak (BR-05 / chk_pasien_lahir)',
+ $q$INSERT INTO pasien (nik, no_bpjs, nama, jenis_kelamin, tanggal_lahir, alamat, no_telepon)
+    VALUES ('3273019999999992', NULL, 'Pasien Masa Depan', 'Laki-laki', CURRENT_DATE + 5, 'Bandung', '081234567890')$q$);
+
+SELECT pg_temp.harus_ditolak('pasien: hapus permanen pasien dengan riwayat pemeriksaan ditolak (BR-11)',
+ $q$DELETE FROM pasien WHERE id_pasien = 'PSN-001'$q$);
+
+-- 3. Tabel surat & Trigger BR-17 (chk_srt_isian, trg_surat_insert, trg_surat_kunci)
+SELECT pg_temp.harus_ditolak('surat: surat IZIN dengan jumlah_hari < 1 ditolak (BR-17 / chk_srt_isian)',
+ $q$INSERT INTO surat (id_pemeriksaan, jenis, isi, jumlah_hari, tujuan_rujukan)
+    VALUES ('PMR-006', 'IZIN', 'Istirahat medis', 0, NULL)$q$);
+
+SELECT pg_temp.harus_ditolak('surat: surat RUJUKAN dengan tujuan kosong ditolak (BR-17 / chk_srt_isian)',
+ $q$INSERT INTO surat (id_pemeriksaan, jenis, isi, jumlah_hari, tujuan_rujukan)
+    VALUES ('PMR-006', 'RUJUKAN', 'Rujukan poli penyakit dalam', NULL, '   ')$q$);
+
+SELECT pg_temp.harus_ditolak('surat: buat surat saat kunjungan TERDAFTAR ditolak (BR-17 / trg_surat_insert)',
+ $q$INSERT INTO surat (id_pemeriksaan, jenis, isi, jumlah_hari, tujuan_rujukan)
+    VALUES ('PMR-008', 'IZIN', 'Istirahat 2 hari', 2, NULL)$q$);
+
+SELECT pg_temp.harus_ditolak('surat: ubah surat berstatus DISERAHKAN ditolak (BR-17 / trg_surat_kunci)',
+ $q$UPDATE surat SET isi = 'Diubah setelah diserahkan' WHERE id_surat = 'SRT-001'$q$);
+
+SELECT pg_temp.harus_ditolak('surat: hapus surat berstatus DISERAHKAN ditolak (BR-17 / trg_surat_kunci)',
+ $q$DELETE FROM surat WHERE id_surat = 'SRT-001'$q$);
+
+
+-- =====================================================================
+-- BAGIAN B (ANGGOTA 2 & 3): PENDAFTARAN, STATUS, REKAM MEDIS, PEMBAYARAN
+-- =====================================================================
 
 -- ---------- Pendaftaran: nomor antrean otomatis (BR-17) dan BPJS (BR-16)
 SELECT pg_temp.harus_berhasil('daftar kunjungan dengan no_antrean NULL (trigger mengisi)',

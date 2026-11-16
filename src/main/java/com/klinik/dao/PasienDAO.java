@@ -4,6 +4,7 @@ import com.klinik.exception.DataMasihDipakaiException;
 import com.klinik.exception.DataNotFoundException;
 import com.klinik.model.JenisKelamin;
 import com.klinik.model.Pasien;
+import com.klinik.util.DatabaseConnection;
 import com.klinik.util.PesanDb;
 
 import java.sql.Connection;
@@ -11,68 +12,77 @@ import java.sql.Date;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
-import java.sql.Types;
+import java.time.LocalDate;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
 
-/** DAO pasien di PostgreSQL (tabel pasien). Signature publik sama dengan versi berbasis file sebelumnya. */
+/**
+ * Data Access Object untuk entitas Pasien menggunakan JDBC PostgreSQL (tabel pasien).
+ * Mengimplementasikan GenericDAO serta mendukung pencarian NIK/ID/Nama/BPJS, nonaktifkan pasien,
+ * dan proteksi hapus permanen bila pasien memiliki riwayat pemeriksaan (ON DELETE RESTRICT / SQLState 23503 & 23001).
+ */
 public class PasienDAO implements GenericDAO<Pasien, String> {
+    private PemeriksaanDAO pemeriksaanDAO;
 
-    private static final String SELECT_DASAR =
-            "SELECT id_pasien, nik, no_bpjs, nama, jenis_kelamin, tanggal_lahir, alamat, no_telepon, "
-          + "tanggal_registrasi, status_aktif FROM pasien ";
-    private static final String URUTAN = " ORDER BY id_pasien";
+    public PasienDAO() {
+    }
 
-    static final String SQL_SEMUA   = SELECT_DASAR + URUTAN;
-    static final String SQL_AKTIF   = SELECT_DASAR + "WHERE status_aktif" + URUTAN;
-    static final String SQL_BY_ID   = SELECT_DASAR + "WHERE id_pasien = ?";
-    static final String SQL_BY_NIK  = SELECT_DASAR + "WHERE nik = ?";
-    static final String SQL_BY_NAMA = SELECT_DASAR + "WHERE lower(nama) LIKE ?" + URUTAN;
-    static final String SQL_CARI_ID   = SELECT_DASAR + "WHERE lower(id_pasien) LIKE ?" + URUTAN;
-    static final String SQL_CARI_NIK  = SELECT_DASAR + "WHERE nik LIKE ?" + URUTAN;
-    static final String SQL_CARI_BPJS = SELECT_DASAR + "WHERE COALESCE(no_bpjs, '') LIKE ?" + URUTAN;
-    static final String SQL_CARI_SEMUA = SELECT_DASAR
-            + "WHERE lower(id_pasien) LIKE ? OR nik LIKE ? OR lower(nama) LIKE ? OR COALESCE(no_bpjs, '') LIKE ?" + URUTAN;
-    static final String SQL_INSERT =
-            "INSERT INTO pasien (id_pasien, nik, no_bpjs, nama, jenis_kelamin, tanggal_lahir, alamat, no_telepon, "
-          + "tanggal_registrasi, status_aktif) "
-          + "VALUES (COALESCE(?, fn_id('PSN', nextval('seq_pasien'))), ?, ?, ?, ?, ?, ?, ?, ?, ?) RETURNING id_pasien";
-    static final String SQL_UPDATE =
-            "UPDATE pasien SET nik = ?, no_bpjs = ?, nama = ?, jenis_kelamin = ?, tanggal_lahir = ?, alamat = ?, "
-          + "no_telepon = ?, tanggal_registrasi = ?, status_aktif = ? WHERE id_pasien = ?";
-    static final String SQL_DELETE  = "DELETE FROM pasien WHERE id_pasien = ?";
-    static final String SQL_AKTIF_SET = "UPDATE pasien SET status_aktif = ? WHERE id_pasien = ?";
-    static final String SQL_ADA_RIWAYAT = "SELECT EXISTS (SELECT 1 FROM pemeriksaan WHERE id_pasien = ?)";
+    public PasienDAO(String ignoredDataDir) {
+    }
 
-    public PasienDAO() { }
+    public PasienDAO(PemeriksaanDAO pemeriksaanDAO) {
+        this.pemeriksaanDAO = pemeriksaanDAO;
+    }
 
-    /** Dipertahankan agar kode lama tetap kompilasi; riwayat kini dicek langsung lewat SQL. */
-    public PasienDAO(PemeriksaanDAO pemeriksaanDAO) { }
+    public PasienDAO(PemeriksaanDAO pemeriksaanDAO, String ignoredDataDir) {
+        this.pemeriksaanDAO = pemeriksaanDAO;
+    }
 
-    public void setPemeriksaanDAO(PemeriksaanDAO pemeriksaanDAO) { }
+    public void setPemeriksaanDAO(PemeriksaanDAO pemeriksaanDAO) {
+        this.pemeriksaanDAO = pemeriksaanDAO;
+    }
 
     public String generateNextId() {
         return Jdbc.idBerikut("PSN", "seq_pasien");
     }
 
-    // ------------------------------------------------------------------ tulis
-
     @Override
-    public void insert(Pasien p) {
-        try (Connection c = Jdbc.buka(); PreparedStatement ps = c.prepareStatement(SQL_INSERT)) {
-            if (p.getId() == null || p.getId().trim().isEmpty()) {
-                ps.setNull(1, Types.VARCHAR);
-            } else {
-                ps.setString(1, p.getId().trim());
+    public void insert(Pasien pasien) {
+        if (pasien == null) {
+            return;
+        }
+        boolean hasId = pasien.getId() != null && !pasien.getId().trim().isEmpty();
+        String sql = hasId
+                ? "INSERT INTO pasien (id_pasien, nik, no_bpjs, nama, jenis_kelamin, tanggal_lahir, alamat, no_telepon, tanggal_registrasi, status_aktif) "
+                  + "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?) RETURNING id_pasien"
+                : "INSERT INTO pasien (nik, no_bpjs, nama, jenis_kelamin, tanggal_lahir, alamat, no_telepon, tanggal_registrasi, status_aktif) "
+                  + "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?) RETURNING id_pasien";
+
+        try (Connection conn = DatabaseConnection.getConnection();
+             PreparedStatement ps = conn.prepareStatement(sql)) {
+            int idx = 1;
+            if (hasId) {
+                ps.setString(idx++, pasien.getId().trim());
             }
-            isiKolom(ps, p, 2);
+            ps.setString(idx++, pasien.getNik());
+            ps.setString(idx++, Jdbc.emptyToNull(pasien.getNoBpjs()));
+            ps.setString(idx++, pasien.getNama());
+            ps.setString(idx++, pasien.getJenisKelamin() != null ? pasien.getJenisKelamin().getLabel() : null);
+            ps.setDate(idx++, pasien.getTanggalLahir() != null ? Date.valueOf(pasien.getTanggalLahir()) : null);
+            ps.setString(idx++, Jdbc.emptyToNull(pasien.getAlamat()));
+            ps.setString(idx++, pasien.getNoTelepon());
+            LocalDate tglReg = pasien.getTanggalRegistrasi() != null ? pasien.getTanggalRegistrasi() : LocalDate.now();
+            ps.setDate(idx++, Date.valueOf(tglReg));
+            ps.setBoolean(idx, pasien.isAktif());
+
             try (ResultSet rs = ps.executeQuery()) {
-                rs.next();
-                p.setId(rs.getString(1));
+                if (rs.next()) {
+                    pasien.setId(rs.getString(1));
+                }
             }
         } catch (SQLException e) {
-            throw Jdbc.gagal(e);
+            throw Jdbc.toKlinikException(e, "Pasien", pasien.getId());
         }
     }
 
@@ -81,14 +91,31 @@ public class PasienDAO implements GenericDAO<Pasien, String> {
     }
 
     @Override
-    public void update(Pasien p) {
-        if (p == null || p.getId() == null) return;
-        try (Connection c = Jdbc.buka(); PreparedStatement ps = c.prepareStatement(SQL_UPDATE)) {
-            isiKolom(ps, p, 1);
-            ps.setString(10, p.getId());
-            ps.executeUpdate();
+    public void update(Pasien pasien) {
+        if (pasien == null || pasien.getId() == null) {
+            return;
+        }
+        String sql = "UPDATE pasien SET nik = ?, no_bpjs = ?, nama = ?, jenis_kelamin = ?, tanggal_lahir = ?, "
+                   + "alamat = ?, no_telepon = ?, tanggal_registrasi = ?, status_aktif = ? WHERE id_pasien = ?";
+        try (Connection conn = DatabaseConnection.getConnection();
+             PreparedStatement ps = conn.prepareStatement(sql)) {
+            ps.setString(1, pasien.getNik());
+            ps.setString(2, Jdbc.emptyToNull(pasien.getNoBpjs()));
+            ps.setString(3, pasien.getNama());
+            ps.setString(4, pasien.getJenisKelamin() != null ? pasien.getJenisKelamin().getLabel() : null);
+            ps.setDate(5, pasien.getTanggalLahir() != null ? Date.valueOf(pasien.getTanggalLahir()) : null);
+            ps.setString(6, Jdbc.emptyToNull(pasien.getAlamat()));
+            ps.setString(7, pasien.getNoTelepon());
+            LocalDate tglReg = pasien.getTanggalRegistrasi() != null ? pasien.getTanggalRegistrasi() : LocalDate.now();
+            ps.setDate(8, Date.valueOf(tglReg));
+            ps.setBoolean(9, pasien.isAktif());
+            ps.setString(10, pasien.getId().trim());
+
+            if (ps.executeUpdate() == 0) {
+                throw new DataNotFoundException("Pasien dengan ID " + pasien.getId() + " tidak ditemukan.");
+            }
         } catch (SQLException e) {
-            throw Jdbc.gagal(e);
+            throw Jdbc.toKlinikException(e, "Pasien", pasien.getId());
         }
     }
 
@@ -96,38 +123,35 @@ public class PasienDAO implements GenericDAO<Pasien, String> {
         update(pasien);
     }
 
-    /** Urutan parameter: nik, no_bpjs, nama, jenis_kelamin, tanggal_lahir, alamat, no_telepon, tanggal_registrasi, status_aktif. */
-    private void isiKolom(PreparedStatement ps, Pasien p, int mulai) throws SQLException {
-        int i = mulai;
-        ps.setString(i++, p.getNik() == null ? "" : p.getNik());
-        Jdbc.teksAtauNull(ps, i++, p.getNoBpjs());
-        ps.setString(i++, p.getNama());
-        if (p.getJenisKelamin() == null) ps.setNull(i++, Types.VARCHAR); else ps.setString(i++, p.getJenisKelamin().getLabel());
-        if (p.getTanggalLahir() == null) ps.setNull(i++, Types.DATE); else ps.setDate(i++, Date.valueOf(p.getTanggalLahir()));
-        ps.setString(i++, p.getAlamat());
-        ps.setString(i++, p.getNoTelepon());
-        ps.setDate(i++, Date.valueOf(p.getTanggalRegistrasi()));
-        ps.setBoolean(i, p.isAktif());
-    }
-
-    /** BR-11: hapus permanen hanya bila belum punya riwayat pemeriksaan. */
+    /**
+     * BR-11: Menghapus pasien secara permanen.
+     * Menangkap pelanggaran ON DELETE RESTRICT (SQLState 23503 / 23001) dari PostgreSQL dan memetakannya ke DataMasihDipakaiException.
+     */
     @Override
     public void delete(String id) throws DataMasihDipakaiException {
-        if (id == null) return;
-        if (hasRiwayatPemeriksaan(id)) {
-            String nama = findById(id).map(Pasien::getNama).orElse(id);
-            throw new DataMasihDipakaiException("Pasien", id, "Pasien " + nama + " (" + id
-                    + ") memiliki riwayat pemeriksaan dan tidak dapat dihapus permanen. Gunakan fitur Nonaktifkan.");
+        if (id == null || id.trim().isEmpty()) {
+            return;
         }
-        try (Connection c = Jdbc.buka(); PreparedStatement ps = c.prepareStatement(SQL_DELETE)) {
-            ps.setString(1, id);
+        String cleanId = id.trim();
+        Optional<Pasien> existing = findById(cleanId);
+        if (pemeriksaanDAO != null && pemeriksaanDAO.existsByPasienId(cleanId)) {
+            String nama = existing.map(Pasien::getNama).orElse(cleanId);
+            throw new DataMasihDipakaiException("Pasien", cleanId,
+                    "Pasien " + nama + " (" + cleanId + ") memiliki riwayat pemeriksaan dan tidak dapat dihapus permanen. Gunakan fitur Nonaktifkan.");
+        }
+
+        String sql = "DELETE FROM pasien WHERE id_pasien = ?";
+        try (Connection conn = DatabaseConnection.getConnection();
+             PreparedStatement ps = conn.prepareStatement(sql)) {
+            ps.setString(1, cleanId);
             ps.executeUpdate();
         } catch (SQLException e) {
             if (PesanDb.dataDipakai(e)) {
-                throw new DataMasihDipakaiException("Pasien", id,
-                        "Pasien " + id + " memiliki riwayat pemeriksaan dan tidak dapat dihapus permanen. Gunakan fitur Nonaktifkan.");
+                String nama = existing.map(Pasien::getNama).orElse(cleanId);
+                throw new DataMasihDipakaiException("Pasien", cleanId,
+                        "Pasien " + nama + " (" + cleanId + ") memiliki riwayat pemeriksaan dan tidak dapat dihapus permanen. Gunakan fitur Nonaktifkan.");
             }
-            throw Jdbc.gagal(e);
+            throw Jdbc.toKlinikException(e, "Pasien", cleanId);
         }
     }
 
@@ -135,115 +159,210 @@ public class PasienDAO implements GenericDAO<Pasien, String> {
         delete(id);
     }
 
+    /**
+     * Mengecek apakah pasien dengan ID tertentu memiliki riwayat pemeriksaan di PostgreSQL.
+     */
     public boolean hasRiwayatPemeriksaan(String pasienId) {
-        if (pasienId == null || pasienId.trim().isEmpty()) return false;
-        try (Connection c = Jdbc.buka(); PreparedStatement ps = c.prepareStatement(SQL_ADA_RIWAYAT)) {
+        if (pasienId == null || pasienId.trim().isEmpty()) {
+            return false;
+        }
+        if (pemeriksaanDAO != null && pemeriksaanDAO.existsByPasienId(pasienId.trim())) {
+            return true;
+        }
+        String sql = "SELECT EXISTS (SELECT 1 FROM pemeriksaan WHERE id_pasien = ?)";
+        try (Connection conn = DatabaseConnection.getConnection();
+             PreparedStatement ps = conn.prepareStatement(sql)) {
             ps.setString(1, pasienId.trim());
             try (ResultSet rs = ps.executeQuery()) {
                 return rs.next() && rs.getBoolean(1);
             }
         } catch (SQLException e) {
-            throw Jdbc.gagal(e);
+            throw Jdbc.toKlinikException(e, "Pasien", pasienId);
         }
     }
 
+    /**
+     * Mengubah status aktif/nonaktif pasien di PostgreSQL.
+     */
     public void toggleAktif(String id, boolean aktif) {
-        try (Connection c = Jdbc.buka(); PreparedStatement ps = c.prepareStatement(SQL_AKTIF_SET)) {
+        if (id == null || id.trim().isEmpty()) {
+            return;
+        }
+        String sql = "UPDATE pasien SET status_aktif = ? WHERE id_pasien = ?";
+        try (Connection conn = DatabaseConnection.getConnection();
+             PreparedStatement ps = conn.prepareStatement(sql)) {
             ps.setBoolean(1, aktif);
-            ps.setString(2, id);
-            ps.executeUpdate();
+            ps.setString(2, id.trim());
+            if (ps.executeUpdate() == 0) {
+                throw new DataNotFoundException("Pasien dengan ID " + id + " tidak ditemukan.");
+            }
         } catch (SQLException e) {
-            throw Jdbc.gagal(e);
+            throw Jdbc.toKlinikException(e, "Pasien", id);
         }
     }
 
+    /**
+     * Menonaktifkan pasien (soft-delete) berdasarkan ID.
+     */
     public void nonaktifkanPasien(String id) throws DataNotFoundException {
-        if (findById(id).isEmpty()) {
-            throw new DataNotFoundException("Pasien dengan ID " + id + " tidak ditemukan.");
-        }
         toggleAktif(id, false);
     }
 
-    // ------------------------------------------------------------------ baca
-
     @Override
     public Optional<Pasien> findById(String id) {
-        if (id == null) return Optional.empty();
-        List<Pasien> hasil = daftar(SQL_BY_ID, id);
-        return hasil.isEmpty() ? Optional.empty() : Optional.of(hasil.get(0));
-    }
-
-    /** Dipakai DAO lain agar satu operasi memakai satu koneksi. Mengembalikan null bila tidak ada. */
-    Pasien muat(Connection c, String id) throws SQLException {
-        try (PreparedStatement ps = c.prepareStatement(SQL_BY_ID)) {
-            ps.setString(1, id);
-            List<Pasien> hasil = baca(ps);
-            return hasil.isEmpty() ? null : hasil.get(0);
+        if (id == null || id.trim().isEmpty()) {
+            return Optional.empty();
+        }
+        try (Connection conn = DatabaseConnection.getConnection()) {
+            return Optional.ofNullable(muat(conn, id.trim()));
+        } catch (SQLException e) {
+            throw Jdbc.toKlinikException(e, "Pasien", id);
         }
     }
 
+    /**
+     * Dipakai DAO lain (mis. PemeriksaanDAO) agar satu operasi memakai satu koneksi.
+     * Mengembalikan null bila tidak ditemukan.
+     */
+    Pasien muat(Connection conn, String id) throws SQLException {
+        if (id == null || id.trim().isEmpty()) {
+            return null;
+        }
+        String sql = "SELECT id_pasien, nik, no_bpjs, nama, jenis_kelamin, tanggal_lahir, alamat, no_telepon, tanggal_registrasi, status_aktif "
+                   + "FROM pasien WHERE id_pasien = ?";
+        try (PreparedStatement ps = conn.prepareStatement(sql)) {
+            ps.setString(1, id.trim());
+            try (ResultSet rs = ps.executeQuery()) {
+                if (rs.next()) {
+                    return mapRow(rs);
+                }
+            }
+        }
+        return null;
+    }
+
     public Optional<Pasien> findByNik(String nik) {
-        if (nik == null) return Optional.empty();
-        List<Pasien> hasil = daftar(SQL_BY_NIK, nik.trim());
-        return hasil.isEmpty() ? Optional.empty() : Optional.of(hasil.get(0));
+        if (nik == null || nik.trim().isEmpty()) {
+            return Optional.empty();
+        }
+        String sql = "SELECT id_pasien, nik, no_bpjs, nama, jenis_kelamin, tanggal_lahir, alamat, no_telepon, tanggal_registrasi, status_aktif "
+                   + "FROM pasien WHERE nik = ?";
+        try (Connection conn = DatabaseConnection.getConnection();
+             PreparedStatement ps = conn.prepareStatement(sql)) {
+            ps.setString(1, nik.trim());
+            try (ResultSet rs = ps.executeQuery()) {
+                if (rs.next()) {
+                    return Optional.of(mapRow(rs));
+                }
+            }
+        } catch (SQLException e) {
+            throw Jdbc.toKlinikException(e, "Pasien", nik);
+        }
+        return Optional.empty();
     }
 
     public List<Pasien> findByNama(String nama) {
-        if (nama == null || nama.trim().isEmpty()) return findAll();
-        return daftar(SQL_BY_NAMA, Jdbc.like(nama));
+        return search(nama, "Nama");
     }
 
     @Override
     public List<Pasien> findAll() {
-        return daftar(SQL_SEMUA);
+        List<Pasien> list = new ArrayList<>();
+        String sql = "SELECT id_pasien, nik, no_bpjs, nama, jenis_kelamin, tanggal_lahir, alamat, no_telepon, tanggal_registrasi, status_aktif "
+                   + "FROM pasien ORDER BY id_pasien";
+        try (Connection conn = DatabaseConnection.getConnection();
+             PreparedStatement ps = conn.prepareStatement(sql);
+             ResultSet rs = ps.executeQuery()) {
+            while (rs.next()) {
+                list.add(mapRow(rs));
+            }
+        } catch (SQLException e) {
+            throw Jdbc.toKlinikException(e, "Pasien", null);
+        }
+        return list;
     }
 
     public List<Pasien> findActive() {
-        return daftar(SQL_AKTIF);
+        List<Pasien> list = new ArrayList<>();
+        String sql = "SELECT id_pasien, nik, no_bpjs, nama, jenis_kelamin, tanggal_lahir, alamat, no_telepon, tanggal_registrasi, status_aktif "
+                   + "FROM pasien WHERE status_aktif = TRUE ORDER BY id_pasien";
+        try (Connection conn = DatabaseConnection.getConnection();
+             PreparedStatement ps = conn.prepareStatement(sql);
+             ResultSet rs = ps.executeQuery()) {
+            while (rs.next()) {
+                list.add(mapRow(rs));
+            }
+        } catch (SQLException e) {
+            throw Jdbc.toKlinikException(e, "Pasien", null);
+        }
+        return list;
     }
 
-    /** Pencarian berdasarkan kata kunci dan kriteria ("Semua", "ID", "NIK", "Nama", "No. BPJS"). */
+    /**
+     * Pencarian pasien berdasarkan kata kunci dan kriteria ("Semua", "ID", "NIK", "Nama", "No. BPJS").
+     */
     public List<Pasien> search(String keyword, String criteria) {
-        if (keyword == null || keyword.trim().isEmpty()) return findAll();
-        String kw = Jdbc.like(keyword);
+        if (keyword == null || keyword.trim().isEmpty()) {
+            return findAll();
+        }
+        String kw = "%" + keyword.trim().toLowerCase() + "%";
         String krit = criteria == null ? "Semua" : criteria.trim();
-        if ("ID".equalsIgnoreCase(krit)) return daftar(SQL_CARI_ID, kw);
-        if ("NIK".equalsIgnoreCase(krit)) return daftar(SQL_CARI_NIK, kw);
-        if ("Nama".equalsIgnoreCase(krit)) return daftar(SQL_BY_NAMA, kw);
-        if ("No. BPJS".equalsIgnoreCase(krit) || "BPJS".equalsIgnoreCase(krit)) return daftar(SQL_CARI_BPJS, kw);
-        return daftar(SQL_CARI_SEMUA, kw, kw, kw, kw);
+        String whereClause;
+        boolean multiParam = false;
+
+        if ("ID".equalsIgnoreCase(krit)) {
+            whereClause = "lower(id_pasien) LIKE ?";
+        } else if ("NIK".equalsIgnoreCase(krit)) {
+            whereClause = "lower(nik) LIKE ?";
+        } else if ("Nama".equalsIgnoreCase(krit)) {
+            whereClause = "lower(nama) LIKE ?";
+        } else if ("No. BPJS".equalsIgnoreCase(krit) || "BPJS".equalsIgnoreCase(krit)) {
+            whereClause = "lower(COALESCE(no_bpjs, '')) LIKE ?";
+        } else {
+            whereClause = "(lower(id_pasien) LIKE ? OR lower(nik) LIKE ? OR lower(nama) LIKE ? OR lower(COALESCE(no_bpjs, '')) LIKE ?)";
+            multiParam = true;
+        }
+
+        List<Pasien> list = new ArrayList<>();
+        String sql = "SELECT id_pasien, nik, no_bpjs, nama, jenis_kelamin, tanggal_lahir, alamat, no_telepon, tanggal_registrasi, status_aktif "
+                   + "FROM pasien WHERE " + whereClause + " ORDER BY id_pasien";
+        try (Connection conn = DatabaseConnection.getConnection();
+             PreparedStatement ps = conn.prepareStatement(sql)) {
+            ps.setString(1, kw);
+            if (multiParam) {
+                ps.setString(2, kw);
+                ps.setString(3, kw);
+                ps.setString(4, kw);
+            }
+            try (ResultSet rs = ps.executeQuery()) {
+                while (rs.next()) {
+                    list.add(mapRow(rs));
+                }
+            }
+        } catch (SQLException e) {
+            throw Jdbc.toKlinikException(e, "Pasien", null);
+        }
+        return list;
     }
 
     public List<Pasien> cari(String keyword) {
         return search(keyword, "Semua");
     }
 
-    private List<Pasien> daftar(String sql, String... parameter) {
-        try (Connection c = Jdbc.buka(); PreparedStatement ps = c.prepareStatement(sql)) {
-            for (int i = 0; i < parameter.length; i++) ps.setString(i + 1, parameter[i]);
-            return baca(ps);
-        } catch (SQLException e) {
-            throw Jdbc.gagal(e);
-        }
-    }
-
-    private List<Pasien> baca(PreparedStatement ps) throws SQLException {
-        List<Pasien> hasil = new ArrayList<>();
-        try (ResultSet rs = ps.executeQuery()) {
-            while (rs.next()) {
-                hasil.add(new Pasien(
-                        rs.getString("id_pasien"),
-                        rs.getString("nik"),
-                        rs.getString("nama"),
-                        JenisKelamin.fromString(rs.getString("jenis_kelamin")),
-                        Jdbc.tanggal(rs, "tanggal_lahir"),
-                        Jdbc.teks(rs, "alamat"),
-                        rs.getString("no_telepon"),
-                        Jdbc.teks(rs, "no_bpjs"),
-                        Jdbc.tanggal(rs, "tanggal_registrasi"),
-                        rs.getBoolean("status_aktif")));
-            }
-        }
-        return hasil;
+    private Pasien mapRow(ResultSet rs) throws SQLException {
+        Date tglLahir = rs.getDate("tanggal_lahir");
+        Date tglReg = rs.getDate("tanggal_registrasi");
+        return new Pasien(
+                rs.getString("id_pasien"),
+                rs.getString("nik"),
+                rs.getString("nama"),
+                JenisKelamin.fromString(rs.getString("jenis_kelamin")),
+                tglLahir != null ? tglLahir.toLocalDate() : null,
+                Jdbc.teks(rs, "alamat"),
+                rs.getString("no_telepon"),
+                Jdbc.teks(rs, "no_bpjs"),
+                tglReg != null ? tglReg.toLocalDate() : LocalDate.now(),
+                rs.getBoolean("status_aktif")
+        );
     }
 }

@@ -73,11 +73,7 @@ public class PasienController {
      */
     public void hapusPasien(String id) throws DataMasihDipakaiException, DataNotFoundException, AksesDitolakException {
         HakAkses.periksaAkses(HakAkses.KELOLA_PASIEN);
-        Pasien p = getPasienById(id);
-        if ((pemeriksaanDAO != null && pemeriksaanDAO.existsByPasienId(id)) || pasienDAO.hasRiwayatPemeriksaan(id)) {
-            throw new DataMasihDipakaiException("Pasien", id,
-                    "Pasien " + p.getNama() + " (" + id + ") memiliki riwayat pemeriksaan dan tidak dapat dihapus permanen. Gunakan fitur Nonaktifkan.");
-        }
+        getPasienById(id);
         pasienDAO.delete(id);
     }
 

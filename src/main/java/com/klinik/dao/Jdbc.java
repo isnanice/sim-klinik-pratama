@@ -1,5 +1,6 @@
 package com.klinik.dao;
 
+import com.klinik.exception.DataMasihDipakaiException;
 import com.klinik.exception.DatabaseException;
 import com.klinik.exception.DataTidakValidException;
 import com.klinik.exception.KlinikException;
@@ -15,15 +16,15 @@ import java.sql.Types;
 import java.time.LocalDate;
 
 /** Fungsi bantu JDBC yang dipakai bersama oleh semua DAO (satu tempat untuk pembuatan ID dan penerjemahan error). */
-final class Jdbc {
+public final class Jdbc {
     private Jdbc() { }
 
-    static Connection buka() throws SQLException {
+    public static Connection buka() throws SQLException {
         return DatabaseConnection.getConnection();
     }
 
     /** ID berikutnya dari sequence PostgreSQL, misalnya PSN-007. Nama sequence berasal dari konstanta DAO, bukan input pengguna. */
-    static String idBerikut(String prefix, String sequence) {
+    public static String idBerikut(String prefix, String sequence) {
         try (Connection c = buka()) {
             return idBerikut(c, prefix, sequence);
         } catch (SQLException e) {
@@ -31,7 +32,7 @@ final class Jdbc {
         }
     }
 
-    static String idBerikut(Connection c, String prefix, String sequence) throws SQLException {
+    public static String idBerikut(Connection c, String prefix, String sequence) throws SQLException {
         try (PreparedStatement ps = c.prepareStatement("SELECT fn_id(?, nextval(?::regclass))")) {
             ps.setString(1, prefix);
             ps.setString(2, sequence);
@@ -42,8 +43,30 @@ final class Jdbc {
         }
     }
 
+    public static String nextId(String prefix, String sequence) throws SQLException {
+        try (Connection c = buka()) {
+            return idBerikut(c, prefix, sequence);
+        }
+    }
+
+    public static String nextId(Connection c, String prefix, String sequence) throws SQLException {
+        return idBerikut(c, prefix, sequence);
+    }
+
+    public static String emptyToNull(String val) {
+        return (val == null || val.trim().isEmpty()) ? null : val.trim();
+    }
+
+    /** Memetakan SQLException PostgreSQL (termasuk trigger BR-xx dan ON DELETE RESTRICT 23503/23001) ke KlinikException. */
+    public static KlinikException toKlinikException(SQLException e, String entityName, String entityId) {
+        if (PesanDb.dataDipakai(e)) {
+            return new DataMasihDipakaiException(entityName, entityId, PesanDb.untukPengguna(e));
+        }
+        return gagal(e);
+    }
+
     /** Kesalahan input yang ditolak database menjadi DataTidakValidException; sisanya DatabaseException. */
-    static KlinikException gagal(SQLException e) {
+    public static KlinikException gagal(SQLException e) {
         if (PesanDb.pelanggaranAturan(e) || PesanDb.tidakValid(e) || PesanDb.duplikat(e)) {
             return new DataTidakValidException(PesanDb.untukPengguna(e));
         }

@@ -4,10 +4,12 @@ import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 import java.security.SecureRandom;
+import java.util.Base64;
 
 /**
  * Utilitas untuk melakukan hashing dan verifikasi password menggunakan SHA-256 + random salt (SecureRandom).
- * Format penyimpanan: "salt:hash" dalam representasi heksadesimal.
+ * Format penyimpanan utama: Base64(salt) + ":" + Base64(SHA-256(salt + password)) sesuai sql/schema.sql dan sql/seed.sql.
+ * Tetap mendukung verifikasi mundur untuk format heksadesimal.
  */
 public final class PasswordUtil {
     private static final int SALT_LENGTH_BYTES = 16;
@@ -17,7 +19,7 @@ public final class PasswordUtil {
     }
 
     /**
-     * Menghasilkan hash password dengan format "salt:hash" menggunakan SHA-256 dan SecureRandom salt.
+     * Menghasilkan hash password dengan format "Base64(salt):Base64(hash)" menggunakan SHA-256 dan SecureRandom salt.
      */
     public static String hashPassword(String plainPassword) {
         if (plainPassword == null || plainPassword.isEmpty()) {
@@ -25,9 +27,8 @@ public final class PasswordUtil {
         }
         byte[] saltBytes = new byte[SALT_LENGTH_BYTES];
         SECURE_RANDOM.nextBytes(saltBytes);
-        String saltHex = bytesToHex(saltBytes);
-        String hashHex = sha256Hex(saltHex, plainPassword);
-        return saltHex + ":" + hashHex;
+        byte[] hashBytes = sha256Bytes(saltBytes, plainPassword);
+        return Base64.getEncoder().encodeToString(saltBytes) + ":" + Base64.getEncoder().encodeToString(hashBytes);
     }
 
     /**
@@ -38,7 +39,7 @@ public final class PasswordUtil {
     }
 
     /**
-     * Memverifikasi kecocokan plainPassword dengan storedPassword berformat "salt:hash".
+     * Memverifikasi kecocokan plainPassword dengan storedPassword berformat "salt:hash" (Base64 maupun Hex).
      */
     public static boolean verifyPassword(String plainPassword, String storedPassword) {
         if (plainPassword == null || storedPassword == null || storedPassword.isEmpty()) {
@@ -46,17 +47,32 @@ public final class PasswordUtil {
         }
         int sepIdx = storedPassword.indexOf(':');
         if (sepIdx <= 0 || sepIdx == storedPassword.length() - 1) {
-            // Fallback jika data lama belum di-hash dengan salt:hash
             return MessageDigest.isEqual(
                     plainPassword.getBytes(StandardCharsets.UTF_8),
                     storedPassword.getBytes(StandardCharsets.UTF_8)
             );
         }
-        String saltHex = storedPassword.substring(0, sepIdx);
-        String expectedHashHex = storedPassword.substring(sepIdx + 1);
-        String actualHashHex = sha256Hex(saltHex, plainPassword);
+        String saltPart = storedPassword.substring(0, sepIdx);
+        String expectedHashPart = storedPassword.substring(sepIdx + 1);
+
+        // 1. Verifikasi format Base64 sesuai sql/schema.sql & sql/seed.sql: Base64(salt):Base64(SHA-256(saltBytes + password))
+        try {
+            byte[] saltBytes = Base64.getDecoder().decode(saltPart);
+            byte[] expectedHashBytes = Base64.getDecoder().decode(expectedHashPart);
+            if (expectedHashBytes.length == 32) {
+                byte[] actualHashBytes = sha256Bytes(saltBytes, plainPassword);
+                if (MessageDigest.isEqual(expectedHashBytes, actualHashBytes)) {
+                    return true;
+                }
+            }
+        } catch (IllegalArgumentException ignored) {
+            // Lanjut ke fallback Hex
+        }
+
+        // 2. Fallback format Hex lama
+        String actualHashHex = sha256Hex(saltPart, plainPassword);
         return MessageDigest.isEqual(
-                expectedHashHex.toLowerCase().getBytes(StandardCharsets.UTF_8),
+                expectedHashPart.toLowerCase().getBytes(StandardCharsets.UTF_8),
                 actualHashHex.toLowerCase().getBytes(StandardCharsets.UTF_8)
         );
     }
@@ -66,6 +82,16 @@ public final class PasswordUtil {
      */
     public static boolean verify(String plainPassword, String storedPassword) {
         return verifyPassword(plainPassword, storedPassword);
+    }
+
+    private static byte[] sha256Bytes(byte[] saltBytes, String plainPassword) {
+        try {
+            MessageDigest md = MessageDigest.getInstance("SHA-256");
+            md.update(saltBytes);
+            return md.digest(plainPassword.getBytes(StandardCharsets.UTF_8));
+        } catch (NoSuchAlgorithmException e) {
+            throw new IllegalStateException("Algoritma SHA-256 tidak tersedia pada JVM ini.", e);
+        }
     }
 
     private static String sha256Hex(String saltHex, String plainPassword) {

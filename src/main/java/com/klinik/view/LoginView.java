@@ -167,9 +167,8 @@ public class LoginView extends JFrame {
 
         JLabel lblHintBody = new JLabel("<html>"
                 + "• <b>Admin</b> : username <code>admin</code> | password <code>admin123</code><br>"
-                + "• <b>Petugas</b> : username <code>petugas01</code> | password <code>petugas123</code><br>"
-                + "• <b>Dokter 1 (DKT-001)</b> : username <code>dokter01</code> | password <code>dokter123</code><br>"
-                + "• <b>Dokter 2 (DKT-002)</b> : username <code>dokter02</code> | password <code>dokter123</code>"
+                + "• <b>Petugas</b> : username <code>petugas</code> | password <code>petugas123</code><br>"
+                + "• <b>Dokter (DKT-006)</b> : username <code>dokter</code> | password <code>dokter123</code>"
                 + "</html>");
         lblHintBody.setFont(UITheme.FONT_MUTED);
         lblHintBody.setForeground(UITheme.TEXT_MUTED);

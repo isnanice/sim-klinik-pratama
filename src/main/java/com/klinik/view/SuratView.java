@@ -271,7 +271,7 @@ public class SuratView extends JPanel {
 
         if (role == Role.DOKTER) {
             String idDkt = current != null && current.getIdDokter() != null && !current.getIdDokter().isEmpty()
-                    ? current.getIdDokter() : "DKT-001";
+                    ? current.getIdDokter() : "DKT-006";
             lblRoleInfo.setText("Mode DOKTER (" + idDkt + "): Buat surat izin/rujukan untuk pemeriksaan Anda.");
         } else if (role == Role.PETUGAS) {
             lblRoleInfo.setText("Mode PETUGAS: Pilih surat berstatus DITERUSKAN lalu klik 'Tandai Diserahkan'.");
