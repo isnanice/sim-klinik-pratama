@@ -157,7 +157,7 @@ public class PasienView extends JPanel {
         spAlamat.setBorder(BorderFactory.createLineBorder(UITheme.BORDER));
 
         addField(leftCol, "ID Pasien", txtId);
-        addField(leftCol, "NIK (16 digit, opsional)", txtNik);
+        addField(leftCol, "NIK * (16 digit angka)", txtNik);
         addField(leftCol, "Nama *", txtNama);
         addField(leftCol, "Jenis Kelamin *", genderPanel);
         addField(leftCol, "Alamat", spAlamat);

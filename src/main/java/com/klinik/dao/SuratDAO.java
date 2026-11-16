@@ -5,310 +5,317 @@ import com.klinik.exception.DataTidakValidException;
 import com.klinik.model.JenisSurat;
 import com.klinik.model.StatusSurat;
 import com.klinik.model.Surat;
+import com.klinik.util.DatabaseConnection;
+import com.klinik.util.Jdbc;
 
-import java.io.BufferedReader;
-import java.io.File;
-import java.io.FileReader;
-import java.io.FileWriter;
-import java.io.IOException;
-import java.io.PrintWriter;
+import java.sql.Connection;
+import java.sql.Date;
+import java.sql.PreparedStatement;
+import java.sql.ResultSet;
+import java.sql.SQLException;
+import java.sql.Types;
 import java.time.LocalDate;
 import java.util.ArrayList;
-import java.util.LinkedHashMap;
 import java.util.List;
-import java.util.Map;
 import java.util.Optional;
-import java.util.stream.Collectors;
 
 /**
  * Data Access Object untuk entitas Surat (Surat Izin Sakit & Surat Rujukan)
- * dengan persistensi file (data/surat.txt).
- * Mendukung penyimpanan dengan status awal DITERUSKAN, perubahan status menjadi DISERAHKAN,
- * serta pemfilteran daftar surat.
+ * menggunakan JDBC PostgreSQL (tabel surat dan view v_surat).
+ * Sinkron dengan constraint chk_srt_isian, chk_srt_serah, serta trigger trg_surat_insert dan trg_surat_kunci (BR-17).
  */
 public class SuratDAO implements GenericDAO<Surat, String> {
-    private static final String DEFAULT_DATA_DIR = "data";
-    private final String dataDir;
-    private final String filePath;
-
-    private final Map<String, Surat> storage = new LinkedHashMap<>();
-    private int counter = 0;
 
     public SuratDAO() {
-        this(System.getProperty("klinik.data.dir", DEFAULT_DATA_DIR));
     }
 
-    public SuratDAO(String dataDir) {
-        this.dataDir = (dataDir != null && !dataDir.trim().isEmpty()) ? dataDir.trim() : DEFAULT_DATA_DIR;
-        this.filePath = this.dataDir + File.separator + "surat.txt";
-        initStorage();
+    public SuratDAO(String ignoredDataDir) {
     }
 
-    private void initStorage() {
-        File dir = new File(dataDir);
-        if (!dir.exists()) {
-            dir.mkdirs();
-        }
-        File file = new File(filePath);
-        if (file.exists()) {
-            loadFromFile();
-        } else {
-            seedInitialData();
-            saveToFile();
-        }
-    }
-
-    private void seedInitialData() {
-        Surat s1 = new Surat(
-                generateNextId(),
-                "PMR-001",
-                JenisSurat.IZIN,
-                "Pasien mengalami ISPA dan membutuhkan istirahat medis di rumah.",
-                3,
-                "",
-                LocalDate.now(),
-                StatusSurat.DITERUSKAN,
-                ""
-        );
-        storage.put(s1.getIdSurat(), s1);
-
-        Surat s2 = new Surat(
-                generateNextId(),
-                "PMR-002",
-                JenisSurat.RUJUKAN,
-                "Mohon pemeriksaan endoskopi lanjutan atas indikasi gastritis kronis.",
-                0,
-                "RSUP Dr. Sardjito - Poli Gastroenterologi",
-                LocalDate.now(),
-                StatusSurat.DISERAHKAN,
-                "Rudi Hartono"
-        );
-        storage.put(s2.getIdSurat(), s2);
-    }
-
-    public synchronized String generateNextId() {
-        counter++;
-        return String.format("SRT-%03d", counter);
-    }
-
-    private void updateCounterFromId(String id) {
-        if (id != null && id.startsWith("SRT-")) {
-            try {
-                int val = Integer.parseInt(id.substring(4));
-                if (val > counter) {
-                    counter = val;
-                }
-            } catch (NumberFormatException ignored) {
-            }
+    public String generateNextId() {
+        try {
+            return Jdbc.nextId("SRT", "seq_surat");
+        } catch (SQLException e) {
+            throw Jdbc.toKlinikException(e, "Surat", null);
         }
     }
 
     /**
-     * Menyimpan surat baru dengan status awal DITERUSKAN.
+     * Menyimpan surat baru ke PostgreSQL dengan status awal DITERUSKAN (BR-17).
      */
-    public synchronized Surat simpan(Surat surat) throws DataTidakValidException {
+    public Surat simpan(Surat surat) throws DataTidakValidException {
         if (surat == null) {
             throw new DataTidakValidException("Surat", "Objek surat tidak boleh null.");
         }
         surat.validate();
-        if (surat.getIdSurat() == null || surat.getIdSurat().trim().isEmpty()) {
-            surat.setIdSurat(generateNextId());
-        } else {
-            updateCounterFromId(surat.getIdSurat());
-        }
         if (surat.getTanggalDibuat() == null) {
             surat.setTanggalDibuat(LocalDate.now());
         }
-        // Pastikan surat yang baru disimpan berstatus DITERUSKAN
         if (surat.getStatus() != StatusSurat.DISERAHKAN) {
             surat.setStatus(StatusSurat.DITERUSKAN);
         }
-        storage.put(surat.getIdSurat(), surat);
-        saveToFile();
-        return surat;
+
+        boolean hasId = surat.getIdSurat() != null && !surat.getIdSurat().trim().isEmpty();
+        String sql = hasId
+                ? "INSERT INTO surat (id_surat, id_pemeriksaan, jenis, isi, jumlah_hari, tujuan_rujukan, tanggal_dibuat, status, diserahkan_oleh) "
+                  + "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?) RETURNING id_surat"
+                : "INSERT INTO surat (id_pemeriksaan, jenis, isi, jumlah_hari, tujuan_rujukan, tanggal_dibuat, status, diserahkan_oleh) "
+                  + "VALUES (?, ?, ?, ?, ?, ?, ?, ?) RETURNING id_surat";
+
+        try (Connection conn = DatabaseConnection.getConnection();
+             PreparedStatement ps = conn.prepareStatement(sql)) {
+            int idx = 1;
+            if (hasId) {
+                ps.setString(idx++, surat.getIdSurat().trim());
+            }
+            ps.setString(idx++, surat.getIdPemeriksaan().trim());
+            ps.setString(idx++, surat.getJenis().name());
+            ps.setString(idx++, surat.getIsi());
+
+            // chk_srt_isian: IZIN wajib jumlah_hari >= 1 & tujuan_rujukan NULL; RUJUKAN wajib jumlah_hari NULL & tujuan_rujukan terisi
+            if (surat.getJenis() == JenisSurat.IZIN) {
+                ps.setInt(idx++, surat.getJumlahHari());
+                ps.setNull(idx++, Types.VARCHAR);
+            } else {
+                ps.setNull(idx++, Types.INTEGER);
+                ps.setString(idx++, surat.getTujuanRujukan().trim());
+            }
+
+            ps.setDate(idx++, Date.valueOf(surat.getTanggalDibuat()));
+            ps.setString(idx++, StatusSurat.DITERUSKAN.name());
+            ps.setNull(idx, Types.VARCHAR);
+
+            try (ResultSet rs = ps.executeQuery()) {
+                if (rs.next()) {
+                    surat.setIdSurat(rs.getString(1));
+                }
+            }
+            return surat;
+        } catch (SQLException e) {
+            throw Jdbc.toKlinikException(e, "Surat", surat.getIdSurat());
+        }
     }
 
     @Override
-    public synchronized void insert(Surat entity) {
+    public void insert(Surat entity) {
         simpan(entity);
     }
 
     @Override
-    public synchronized void update(Surat entity) throws DataTidakValidException, DataNotFoundException {
+    public void update(Surat entity) throws DataTidakValidException, DataNotFoundException {
         if (entity == null || entity.getIdSurat() == null) {
             throw new DataTidakValidException("Surat", "ID Surat yang akan diperbarui tidak valid.");
         }
-        Surat existing = storage.get(entity.getIdSurat());
-        if (existing == null) {
-            throw new DataNotFoundException("Surat dengan ID " + entity.getIdSurat() + " tidak ditemukan.");
-        }
+        Surat existing = findById(entity.getIdSurat())
+                .orElseThrow(() -> new DataNotFoundException("Surat dengan ID " + entity.getIdSurat() + " tidak ditemukan."));
         if (existing.getStatus() == StatusSurat.DISERAHKAN) {
             throw new DataTidakValidException("Status Surat",
-                    "Surat " + existing.getIdSurat() + " sudah berstatus DISERAHKAN dan tidak dapat diubah.");
+                    "BR-17: Surat " + existing.getIdSurat() + " sudah berstatus DISERAHKAN dan tidak dapat diubah.");
         }
         entity.validate();
-        storage.put(entity.getIdSurat(), entity);
-        saveToFile();
+
+        String sql = "UPDATE surat SET id_pemeriksaan = ?, jenis = ?, isi = ?, jumlah_hari = ?, tujuan_rujukan = ?, "
+                   + "tanggal_dibuat = ?, status = ?, diserahkan_oleh = ? WHERE id_surat = ?";
+        try (Connection conn = DatabaseConnection.getConnection();
+             PreparedStatement ps = conn.prepareStatement(sql)) {
+            ps.setString(1, entity.getIdPemeriksaan().trim());
+            ps.setString(2, entity.getJenis().name());
+            ps.setString(3, entity.getIsi());
+            if (entity.getJenis() == JenisSurat.IZIN) {
+                ps.setInt(4, entity.getJumlahHari());
+                ps.setNull(5, Types.VARCHAR);
+            } else {
+                ps.setNull(4, Types.INTEGER);
+                ps.setString(5, entity.getTujuanRujukan().trim());
+            }
+            ps.setDate(6, Date.valueOf(entity.getTanggalDibuat() != null ? entity.getTanggalDibuat() : LocalDate.now()));
+            ps.setString(7, entity.getStatus().name());
+            if (entity.getStatus() == StatusSurat.DISERAHKAN) {
+                ps.setString(8, Jdbc.emptyToNull(entity.getDiserahkanOleh()));
+            } else {
+                ps.setNull(8, Types.VARCHAR);
+            }
+            ps.setString(9, entity.getIdSurat().trim());
+
+            if (ps.executeUpdate() == 0) {
+                throw new DataNotFoundException("Surat dengan ID " + entity.getIdSurat() + " tidak ditemukan.");
+            }
+        } catch (SQLException e) {
+            throw Jdbc.toKlinikException(e, "Surat", entity.getIdSurat());
+        }
     }
 
     @Override
-    public synchronized void delete(String id) throws DataTidakValidException {
-        if (id == null) {
+    public void delete(String id) throws DataTidakValidException {
+        if (id == null || id.trim().isEmpty()) {
             return;
         }
-        Surat existing = storage.get(id);
-        if (existing != null && existing.getStatus() == StatusSurat.DISERAHKAN) {
+        Optional<Surat> existing = findById(id.trim());
+        if (existing.isPresent() && existing.get().getStatus() == StatusSurat.DISERAHKAN) {
             throw new DataTidakValidException("Status Surat",
-                    "Surat " + id + " sudah berstatus DISERAHKAN dan tidak dapat dihapus.");
+                    "BR-17: Surat " + id + " sudah berstatus DISERAHKAN dan tidak dapat dihapus.");
         }
-        storage.remove(id);
-        saveToFile();
+        String sql = "DELETE FROM surat WHERE id_surat = ?";
+        try (Connection conn = DatabaseConnection.getConnection();
+             PreparedStatement ps = conn.prepareStatement(sql)) {
+            ps.setString(1, id.trim());
+            ps.executeUpdate();
+        } catch (SQLException e) {
+            throw Jdbc.toKlinikException(e, "Surat", id.trim());
+        }
     }
 
     /**
-     * Mengubah status surat dari DITERUSKAN menjadi DISERAHKAN serta mencatat petugas yang menyerahkan.
-     * Surat yang sudah DISERAHKAN bersifat final dan tidak dapat diubah kembali.
+     * FR-30 & BR-17: Mengubah status surat dari DITERUSKAN menjadi DISERAHKAN serta mencatat petugas yang menyerahkan.
+     * Surat yang sudah DISERAHKAN terkunci baik di model Java maupun lewat trigger trg_surat_kunci di PostgreSQL.
      */
-    public synchronized Surat ubahStatusDiserahkan(String idSurat, String diserahkanOleh)
+    public Surat ubahStatusDiserahkan(String idSurat, String diserahkanOleh)
             throws DataNotFoundException, DataTidakValidException {
         if (idSurat == null || idSurat.trim().isEmpty()) {
             throw new DataTidakValidException("ID Surat", "ID Surat wajib dipilih.");
         }
-        Surat surat = storage.get(idSurat.trim());
-        if (surat == null) {
-            throw new DataNotFoundException("Surat dengan ID " + idSurat + " tidak ditemukan.");
-        }
+        Surat surat = findById(idSurat.trim())
+                .orElseThrow(() -> new DataNotFoundException("Surat dengan ID " + idSurat + " tidak ditemukan."));
         if (surat.getStatus() == StatusSurat.DISERAHKAN) {
             throw new DataTidakValidException("Status Surat",
                     "Surat " + idSurat + " sudah diserahkan sebelumnya oleh " + surat.getDiserahkanOleh() + ".");
         }
         surat.tandaiDiserahkan(diserahkanOleh);
-        saveToFile();
-        return surat;
+
+        String sql = "UPDATE surat SET status = 'DISERAHKAN', diserahkan_oleh = ? WHERE id_surat = ?";
+        try (Connection conn = DatabaseConnection.getConnection();
+             PreparedStatement ps = conn.prepareStatement(sql)) {
+            ps.setString(1, surat.getDiserahkanOleh());
+            ps.setString(2, surat.getIdSurat());
+            if (ps.executeUpdate() == 0) {
+                throw new DataNotFoundException("Surat dengan ID " + idSurat + " tidak ditemukan.");
+            }
+            return surat;
+        } catch (SQLException e) {
+            throw Jdbc.toKlinikException(e, "Surat", idSurat);
+        }
     }
 
     @Override
-    public synchronized Optional<Surat> findById(String id) {
-        if (id == null) {
+    public Optional<Surat> findById(String id) {
+        if (id == null || id.trim().isEmpty()) {
             return Optional.empty();
         }
-        return Optional.ofNullable(storage.get(id));
+        String sql = "SELECT id_surat, id_pemeriksaan, jenis, isi, jumlah_hari, tujuan_rujukan, "
+                   + "tanggal_dibuat, status, diserahkan_oleh, id_pasien, nama_pasien, id_dokter, nama_dokter "
+                   + "FROM v_surat WHERE id_surat = ?";
+        try (Connection conn = DatabaseConnection.getConnection();
+             PreparedStatement ps = conn.prepareStatement(sql)) {
+            ps.setString(1, id.trim());
+            try (ResultSet rs = ps.executeQuery()) {
+                if (rs.next()) {
+                    return Optional.of(mapRow(rs));
+                }
+            }
+        } catch (SQLException e) {
+            throw Jdbc.toKlinikException(e, "Surat", id);
+        }
+        return Optional.empty();
     }
 
     @Override
-    public synchronized List<Surat> findAll() {
-        return new ArrayList<>(storage.values());
+    public List<Surat> findAll() {
+        return filterSurat(null, null, null);
     }
 
-    public synchronized List<Surat> findByStatus(StatusSurat status) {
-        if (status == null) {
-            return findAll();
-        }
-        return storage.values().stream()
-                .filter(s -> s.getStatus() == status)
-                .collect(Collectors.toList());
+    public List<Surat> findByStatus(StatusSurat status) {
+        return filterSurat(null, status, null);
     }
 
-    public synchronized List<Surat> findByJenis(JenisSurat jenis) {
-        if (jenis == null) {
-            return findAll();
-        }
-        return storage.values().stream()
-                .filter(s -> s.getJenis() == jenis)
-                .collect(Collectors.toList());
+    public List<Surat> findByJenis(JenisSurat jenis) {
+        return filterSurat(jenis, null, null);
     }
 
-    public synchronized List<Surat> findByPemeriksaanId(String idPemeriksaan) {
+    public List<Surat> findByPemeriksaanId(String idPemeriksaan) {
         if (idPemeriksaan == null || idPemeriksaan.trim().isEmpty()) {
             return new ArrayList<>();
         }
-        String clean = idPemeriksaan.trim();
-        return storage.values().stream()
-                .filter(s -> s.getIdPemeriksaan() != null && s.getIdPemeriksaan().equalsIgnoreCase(clean))
-                .collect(Collectors.toList());
+        List<Surat> list = new ArrayList<>();
+        String sql = "SELECT id_surat, id_pemeriksaan, jenis, isi, jumlah_hari, tujuan_rujukan, "
+                   + "tanggal_dibuat, status, diserahkan_oleh, id_pasien, nama_pasien, id_dokter, nama_dokter "
+                   + "FROM v_surat WHERE lower(id_pemeriksaan) = lower(?) ORDER BY id_surat";
+        try (Connection conn = DatabaseConnection.getConnection();
+             PreparedStatement ps = conn.prepareStatement(sql)) {
+            ps.setString(1, idPemeriksaan.trim());
+            try (ResultSet rs = ps.executeQuery()) {
+                while (rs.next()) {
+                    list.add(mapRow(rs));
+                }
+            }
+        } catch (SQLException e) {
+            throw Jdbc.toKlinikException(e, "Surat", idPemeriksaan);
+        }
+        return list;
     }
 
     /**
-     * Memfilter daftar surat berdasarkan jenis, status, dan kata kunci pencarian.
+     * Memfilter daftar surat menggunakan view v_surat berdasarkan jenis, status, dan kata kunci pencarian.
      */
-    public synchronized List<Surat> filterSurat(JenisSurat jenis, StatusSurat status, String keyword) {
-        String kw = keyword != null ? keyword.trim().toLowerCase() : "";
-        return storage.values().stream()
-                .filter(s -> jenis == null || s.getJenis() == jenis)
-                .filter(s -> status == null || s.getStatus() == status)
-                .filter(s -> {
-                    if (kw.isEmpty()) return true;
-                    return (s.getIdSurat() != null && s.getIdSurat().toLowerCase().contains(kw)) ||
-                           (s.getIdPemeriksaan() != null && s.getIdPemeriksaan().toLowerCase().contains(kw)) ||
-                           (s.getIsi() != null && s.getIsi().toLowerCase().contains(kw)) ||
-                           (s.getTujuanRujukan() != null && s.getTujuanRujukan().toLowerCase().contains(kw)) ||
-                           (s.getDiserahkanOleh() != null && s.getDiserahkanOleh().toLowerCase().contains(kw));
-                })
-                .collect(Collectors.toList());
-    }
+    public List<Surat> filterSurat(JenisSurat jenis, StatusSurat status, String keyword) {
+        StringBuilder sql = new StringBuilder(
+                "SELECT id_surat, id_pemeriksaan, jenis, isi, jumlah_hari, tujuan_rujukan, "
+                + "tanggal_dibuat, status, diserahkan_oleh, id_pasien, nama_pasien, id_dokter, nama_dokter "
+                + "FROM v_surat WHERE 1=1");
+        List<Object> params = new ArrayList<>();
 
-    private synchronized void saveToFile() {
-        try (PrintWriter writer = new PrintWriter(new FileWriter(filePath))) {
-            for (Surat s : storage.values()) {
-                // Format: idSurat|idPemeriksaan|jenis|isi|jumlahHari|tujuanRujukan|tanggalDibuat|status|diserahkanOleh
-                String line = String.join("|",
-                        escape(s.getIdSurat()),
-                        escape(s.getIdPemeriksaan()),
-                        s.getJenis() != null ? s.getJenis().name() : "",
-                        escape(s.getIsi()),
-                        String.valueOf(s.getJumlahHari()),
-                        escape(s.getTujuanRujukan()),
-                        s.getTanggalDibuat() != null ? s.getTanggalDibuat().toString() : "",
-                        s.getStatus() != null ? s.getStatus().name() : StatusSurat.DITERUSKAN.name(),
-                        escape(s.getDiserahkanOleh())
-                );
-                writer.println(line);
-            }
-        } catch (IOException e) {
-            System.err.println("Gagal menyimpan data surat: " + e.getMessage());
+        if (jenis != null) {
+            sql.append(" AND jenis = ?");
+            params.add(jenis.name());
         }
-    }
+        if (status != null) {
+            sql.append(" AND status = ?");
+            params.add(status.name());
+        }
+        if (keyword != null && !keyword.trim().isEmpty()) {
+            String kw = "%" + keyword.trim().toLowerCase() + "%";
+            sql.append(" AND (lower(id_surat) LIKE ? OR lower(id_pemeriksaan) LIKE ? "
+                    + "OR lower(nama_pasien) LIKE ? OR lower(nama_dokter) LIKE ? "
+                    + "OR lower(isi) LIKE ? OR lower(COALESCE(tujuan_rujukan, '')) LIKE ? "
+                    + "OR lower(COALESCE(diserahkan_oleh, '')) LIKE ?)");
+            for (int i = 0; i < 7; i++) {
+                params.add(kw);
+            }
+        }
+        sql.append(" ORDER BY id_surat");
 
-    private synchronized void loadFromFile() {
-        storage.clear();
-        try (BufferedReader reader = new BufferedReader(new FileReader(filePath))) {
-            String line;
-            while ((line = reader.readLine()) != null) {
-                if (line.trim().isEmpty()) continue;
-                String[] parts = line.split("\\|", -1);
-                if (parts.length >= 9) {
-                    String idSurat = unescape(parts[0]);
-                    String idPemeriksaan = unescape(parts[1]);
-                    JenisSurat jenis = JenisSurat.fromString(parts[2]);
-                    String isi = unescape(parts[3]);
-                    int jumlahHari = 0;
-                    try {
-                        jumlahHari = Integer.parseInt(parts[4].trim());
-                    } catch (NumberFormatException ignored) {
-                    }
-                    String tujuanRujukan = unescape(parts[5]);
-                    LocalDate tglDibuat = parts[6].isEmpty() ? LocalDate.now() : LocalDate.parse(parts[6]);
-                    StatusSurat status = StatusSurat.fromString(parts[7]);
-                    String diserahkanOleh = unescape(parts[8]);
-
-                    Surat surat = new Surat(idSurat, idPemeriksaan, jenis, isi,
-                            jumlahHari, tujuanRujukan, tglDibuat, status, diserahkanOleh);
-                    storage.put(idSurat, surat);
-                    updateCounterFromId(idSurat);
+        List<Surat> list = new ArrayList<>();
+        try (Connection conn = DatabaseConnection.getConnection();
+             PreparedStatement ps = conn.prepareStatement(sql.toString())) {
+            for (int i = 0; i < params.size(); i++) {
+                ps.setObject(i + 1, params.get(i));
+            }
+            try (ResultSet rs = ps.executeQuery()) {
+                while (rs.next()) {
+                    list.add(mapRow(rs));
                 }
             }
-        } catch (Exception e) {
-            System.err.println("Gagal memuat data surat: " + e.getMessage());
+        } catch (SQLException e) {
+            throw Jdbc.toKlinikException(e, "Surat", null);
         }
+        return list;
     }
 
-    private String escape(String val) {
-        if (val == null) return "";
-        return val.replace("\n", "\\n").replace("|", "/");
-    }
-
-    private String unescape(String val) {
-        if (val == null) return "";
-        return val.replace("\\n", "\n");
+    private Surat mapRow(ResultSet rs) throws SQLException {
+        Date tgl = rs.getDate("tanggal_dibuat");
+        int jmlHari = rs.getInt("jumlah_hari");
+        if (rs.wasNull()) {
+            jmlHari = 0;
+        }
+        return new Surat(
+                rs.getString("id_surat"),
+                rs.getString("id_pemeriksaan"),
+                JenisSurat.fromString(rs.getString("jenis")),
+                rs.getString("isi"),
+                jmlHari,
+                rs.getString("tujuan_rujukan"),
+                tgl != null ? tgl.toLocalDate() : LocalDate.now(),
+                StatusSurat.fromString(rs.getString("status")),
+                rs.getString("diserahkan_oleh")
+        );
     }
 }

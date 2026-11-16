@@ -9,7 +9,8 @@ import java.util.regex.Pattern;
 public final class PesanDb {
 
     public static final String PELANGGARAN_ATURAN = "P0001";   // RAISE EXCEPTION dari trigger (BR-xx)
-    public static final String DATA_DIPAKAI       = "23503";   // foreign key (data punya riwayat)
+    public static final String DATA_DIPAKAI       = "23503";   // foreign_key_violation (data punya riwayat)
+    public static final String RESTRICT_DIPAKAI   = "23001";   // restrict_violation pada ON DELETE RESTRICT (PostgreSQL 17/18+)
     public static final String DUPLIKAT           = "23505";   // unique
     public static final String TIDAK_VALID        = "23514";   // check
 
@@ -44,14 +45,14 @@ public final class PesanDb {
         if (m.find() && PESAN_CONSTRAINT.containsKey(m.group(1))) {
             return PESAN_CONSTRAINT.get(m.group(1));
         }
-        if (DATA_DIPAKAI.equals(e.getSQLState())) {
+        if (dataDipakai(e)) {
             return "Data masih dipakai oleh data lain (memiliki riwayat) sehingga tidak dapat dihapus.";
         }
         return mentah;
     }
 
     public static boolean pelanggaranAturan(SQLException e) { return PELANGGARAN_ATURAN.equals(e.getSQLState()); }
-    public static boolean dataDipakai(SQLException e)       { return DATA_DIPAKAI.equals(e.getSQLState()); }
+    public static boolean dataDipakai(SQLException e)       { return DATA_DIPAKAI.equals(e.getSQLState()) || RESTRICT_DIPAKAI.equals(e.getSQLState()); }
     public static boolean duplikat(SQLException e)          { return DUPLIKAT.equals(e.getSQLState()); }
     public static boolean tidakValid(SQLException e)        { return TIDAK_VALID.equals(e.getSQLState()); }
 

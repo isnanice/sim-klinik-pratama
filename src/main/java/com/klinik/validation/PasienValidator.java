@@ -16,6 +16,7 @@ public class PasienValidator {
         if (pasien == null) {
             throw new DataTidakValidException("Pasien", "Objek pasien tidak boleh null.");
         }
+        validateNik(pasien.getNik());
         Validator.validateNotEmpty(pasien.getNama(), "Nama Pasien", "Nama pasien wajib diisi.");
         if (pasien.getJenisKelamin() == null) {
             throw new DataTidakValidException("Jenis Kelamin", "Jenis kelamin wajib dipilih.");
@@ -23,6 +24,13 @@ public class PasienValidator {
         validateTanggalLahir(pasien.getTanggalLahir());
         Validator.validatePhone(pasien.getNoTelepon());
         validateNoBpjs(pasien.getNoBpjs());
+    }
+
+    /** NIK wajib diisi dan terdiri dari 16 digit angka sesuai chk_pasien_nik. */
+    public static void validateNik(String nik) throws DataTidakValidException {
+        if (nik == null || !nik.trim().matches("^[0-9]{16}$")) {
+            throw new DataTidakValidException("NIK", "NIK wajib diisi dan harus terdiri dari 16 digit angka.");
+        }
     }
 
     /** BR-05: tanggal lahir wajib diisi dan tidak boleh di masa depan. */

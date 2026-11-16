@@ -1,277 +1,236 @@
 package com.klinik.dao;
 
+import com.klinik.exception.DataMasihDipakaiException;
 import com.klinik.exception.DataNotFoundException;
 import com.klinik.exception.DataTidakValidException;
-import com.klinik.model.JenisKelamin;
 import com.klinik.model.Petugas;
 import com.klinik.model.Role;
+import com.klinik.util.DatabaseConnection;
+import com.klinik.util.Jdbc;
 import com.klinik.util.PasswordUtil;
+import com.klinik.util.PesanDb;
 
-import java.io.BufferedReader;
-import java.io.File;
-import java.io.FileReader;
-import java.io.FileWriter;
-import java.io.IOException;
-import java.io.PrintWriter;
+import java.sql.Connection;
+import java.sql.PreparedStatement;
+import java.sql.ResultSet;
+import java.sql.SQLException;
 import java.util.ArrayList;
-import java.util.LinkedHashMap;
 import java.util.List;
-import java.util.Map;
 import java.util.Optional;
-import java.util.stream.Collectors;
 
 /**
- * Data Access Object untuk entitas Petugas/Pengguna Klinik dengan persistensi file (data/petugas.txt).
- * Menyediakan pencarian berdasarkan username, validasi status aktif, dan operasi CRUD dasar petugas.
+ * Data Access Object untuk entitas Petugas/Pengguna Klinik menggunakan JDBC PostgreSQL (tabel petugas).
+ * Menyediakan pencarian berdasarkan username, validasi status_aktif (BR-01), dan proteksi hapus (BR-11).
  */
 public class PetugasDAO implements GenericDAO<Petugas, String> {
-    private static final String DEFAULT_DATA_DIR = "data";
-    private final String dataDir;
-    private final String filePath;
-
-    private final Map<String, Petugas> storage = new LinkedHashMap<>();
-    private int counter = 0;
 
     public PetugasDAO() {
-        this(System.getProperty("klinik.data.dir", DEFAULT_DATA_DIR));
     }
 
-    public PetugasDAO(String dataDir) {
-        this.dataDir = (dataDir != null && !dataDir.trim().isEmpty()) ? dataDir.trim() : DEFAULT_DATA_DIR;
-        this.filePath = this.dataDir + File.separator + "petugas.txt";
-        initStorage();
+    public PetugasDAO(String ignoredDataDir) {
     }
 
-    private void initStorage() {
-        File dir = new File(dataDir);
-        if (!dir.exists()) {
-            dir.mkdirs();
-        }
-        File file = new File(filePath);
-        if (file.exists()) {
-            loadFromFile();
-            ensureDefaultAccounts();
-        } else {
-            seedInitialData();
-            saveToFile();
-        }
-    }
-
-    private void ensureDefaultAccounts() {
-        boolean changed = false;
-        if (!cariByUsername("admin").isPresent()) {
-            insert(new Petugas(generateNextId(), "Siti Rahma", JenisKelamin.PEREMPUAN,
-                    "Jl. Kaliurang Km 5, Sleman", "081234567801", true,
-                    "admin", PasswordUtil.hashPassword("admin123"), Role.ADMIN, ""));
-            changed = true;
-        }
-        if (!cariByUsername("petugas01").isPresent()) {
-            insert(new Petugas(generateNextId(), "Rudi Hartono", JenisKelamin.LAKI_LAKI,
-                    "Jl. Gejayan No. 15, Yogyakarta", "081234567802", true,
-                    "petugas01", PasswordUtil.hashPassword("petugas123"), Role.PETUGAS, ""));
-            changed = true;
-        }
-        if (!cariByUsername("dokter01").isPresent()) {
-            insert(new Petugas(generateNextId(), "dr. Ani Wijaya", JenisKelamin.PEREMPUAN,
-                    "Jl. Malioboro No. 10, Yogyakarta", "081234567890", true,
-                    "dokter01", PasswordUtil.hashPassword("dokter123"), Role.DOKTER, "DKT-001"));
-            changed = true;
-        }
-        if (!cariByUsername("dokter02").isPresent()) {
-            insert(new Petugas(generateNextId(), "dr. Hadi Nugroho, Sp.PD", JenisKelamin.LAKI_LAKI,
-                    "Jl. Kaliurang Km 5, Sleman", "081298765432", true,
-                    "dokter02", PasswordUtil.hashPassword("dokter123"), Role.DOKTER, "DKT-002"));
-            changed = true;
-        }
-        if (changed) {
-            saveToFile();
-        }
-    }
-
-    private void seedInitialData() {
-        insert(new Petugas(
-                generateNextId(),
-                "Siti Rahma",
-                JenisKelamin.PEREMPUAN,
-                "Jl. Kaliurang Km 5, Sleman",
-                "081234567801",
-                true,
-                "admin",
-                PasswordUtil.hashPassword("admin123"),
-                Role.ADMIN,
-                ""
-        ));
-        insert(new Petugas(
-                generateNextId(),
-                "Rudi Hartono",
-                JenisKelamin.LAKI_LAKI,
-                "Jl. Gejayan No. 15, Yogyakarta",
-                "081234567802",
-                true,
-                "petugas01",
-                PasswordUtil.hashPassword("petugas123"),
-                Role.PETUGAS,
-                ""
-        ));
-        insert(new Petugas(
-                generateNextId(),
-                "Rudi Hartono",
-                JenisKelamin.LAKI_LAKI,
-                "Jl. Gejayan No. 15, Yogyakarta",
-                "081234567802",
-                true,
-                "petugas",
-                PasswordUtil.hashPassword("petugas123"),
-                Role.PETUGAS,
-                ""
-        ));
-        insert(new Petugas(
-                generateNextId(),
-                "dr. Ani Wijaya",
-                JenisKelamin.PEREMPUAN,
-                "Jl. Malioboro No. 10, Yogyakarta",
-                "081234567890",
-                true,
-                "dokter01",
-                PasswordUtil.hashPassword("dokter123"),
-                Role.DOKTER,
-                "DKT-001"
-        ));
-        insert(new Petugas(
-                generateNextId(),
-                "dr. Hadi Nugroho, Sp.PD",
-                JenisKelamin.LAKI_LAKI,
-                "Jl. Kaliurang Km 5, Sleman",
-                "081298765432",
-                true,
-                "dokter02",
-                PasswordUtil.hashPassword("dokter123"),
-                Role.DOKTER,
-                "DKT-002"
-        ));
-        insert(new Petugas(
-                generateNextId(),
-                "dr. Ani Wijaya",
-                JenisKelamin.PEREMPUAN,
-                "Jl. Malioboro No. 10, Yogyakarta",
-                "081234567890",
-                true,
-                "dokter",
-                PasswordUtil.hashPassword("dokter123"),
-                Role.DOKTER,
-                "DKT-001"
-        ));
-        insert(new Petugas(
-                generateNextId(),
-                "Andi Pratama (Nonaktif)",
-                JenisKelamin.LAKI_LAKI,
-                "Jl. Bantul Km 4, Yogyakarta",
-                "081234567899",
-                false,
-                "nonaktif",
-                PasswordUtil.hashPassword("nonaktif123"),
-                Role.PETUGAS,
-                ""
-        ));
-    }
-
-    public synchronized String generateNextId() {
-        counter++;
-        return String.format("PTG-%03d", counter);
-    }
-
-    private void updateCounterFromId(String id) {
-        if (id != null && id.startsWith("PTG-")) {
-            try {
-                int val = Integer.parseInt(id.substring(4));
-                if (val > counter) {
-                    counter = val;
-                }
-            } catch (NumberFormatException ignored) {
-            }
+    public String generateNextId() {
+        try {
+            return Jdbc.nextId("PTG", "seq_petugas");
+        } catch (SQLException e) {
+            throw Jdbc.toKlinikException(e, "Petugas", null);
         }
     }
 
     @Override
-    public synchronized void insert(Petugas entity) {
+    public void insert(Petugas entity) {
         if (entity == null) {
             return;
         }
-        if (entity.getId() == null || entity.getId().trim().isEmpty()) {
-            entity.setId(generateNextId());
-        } else {
-            updateCounterFromId(entity.getId());
+        ensurePasswordHashed(entity);
+        boolean hasId = entity.getId() != null && !entity.getId().trim().isEmpty();
+        String sql = hasId
+                ? "INSERT INTO petugas (id_petugas, nama, alamat, no_telepon, username, password_hash, role, id_dokter, status_aktif) "
+                  + "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?) RETURNING id_petugas"
+                : "INSERT INTO petugas (nama, alamat, no_telepon, username, password_hash, role, id_dokter, status_aktif) "
+                  + "VALUES (?, ?, ?, ?, ?, ?, ?, ?) RETURNING id_petugas";
+
+        try (Connection conn = DatabaseConnection.getConnection();
+             PreparedStatement ps = conn.prepareStatement(sql)) {
+            int idx = 1;
+            if (hasId) {
+                ps.setString(idx++, entity.getId().trim());
+            }
+            ps.setString(idx++, entity.getNama());
+            ps.setString(idx++, Jdbc.emptyToNull(entity.getAlamat()));
+            ps.setString(idx++, entity.getNoTelepon());
+            ps.setString(idx++, entity.getUsername());
+            ps.setString(idx++, entity.getPasswordHash());
+            Role role = entity.getRole() != null ? entity.getRole() : Role.PETUGAS;
+            ps.setString(idx++, role.name());
+            ps.setString(idx++, role == Role.DOKTER ? Jdbc.emptyToNull(entity.getIdDokter()) : null);
+            ps.setBoolean(idx, entity.isAktif());
+
+            try (ResultSet rs = ps.executeQuery()) {
+                if (rs.next()) {
+                    entity.setId(rs.getString(1));
+                }
+            }
+        } catch (SQLException e) {
+            throw Jdbc.toKlinikException(e, "Petugas", entity.getId());
+        }
+    }
+
+    @Override
+    public void update(Petugas entity) {
+        if (entity == null || entity.getId() == null) {
+            return;
         }
         ensurePasswordHashed(entity);
-        storage.put(entity.getId(), entity);
-        saveToFile();
+        String sql = "UPDATE petugas SET nama = ?, alamat = ?, no_telepon = ?, username = ?, password_hash = ?, "
+                   + "role = ?, id_dokter = ?, status_aktif = ? WHERE id_petugas = ?";
+        try (Connection conn = DatabaseConnection.getConnection();
+             PreparedStatement ps = conn.prepareStatement(sql)) {
+            Role role = entity.getRole() != null ? entity.getRole() : Role.PETUGAS;
+            ps.setString(1, entity.getNama());
+            ps.setString(2, Jdbc.emptyToNull(entity.getAlamat()));
+            ps.setString(3, entity.getNoTelepon());
+            ps.setString(4, entity.getUsername());
+            ps.setString(5, entity.getPasswordHash());
+            ps.setString(6, role.name());
+            ps.setString(7, role == Role.DOKTER ? Jdbc.emptyToNull(entity.getIdDokter()) : null);
+            ps.setBoolean(8, entity.isAktif());
+            ps.setString(9, entity.getId().trim());
+            if (ps.executeUpdate() == 0) {
+                throw new DataNotFoundException("Petugas dengan ID " + entity.getId() + " tidak ditemukan.");
+            }
+        } catch (SQLException e) {
+            throw Jdbc.toKlinikException(e, "Petugas", entity.getId());
+        }
     }
 
+    /**
+     * BR-11: Menangkap pelanggaran ON DELETE RESTRICT (SQLState 23503) dan memetakannya ke DataMasihDipakaiException.
+     */
     @Override
-    public synchronized void update(Petugas entity) {
-        if (entity != null && entity.getId() != null) {
-            ensurePasswordHashed(entity);
-            storage.put(entity.getId(), entity);
-            saveToFile();
+    public void delete(String id) throws DataMasihDipakaiException {
+        if (id == null || id.trim().isEmpty()) {
+            return;
+        }
+        Optional<Petugas> existing = findById(id.trim());
+        String sql = "DELETE FROM petugas WHERE id_petugas = ?";
+        try (Connection conn = DatabaseConnection.getConnection();
+             PreparedStatement ps = conn.prepareStatement(sql)) {
+            ps.setString(1, id.trim());
+            ps.executeUpdate();
+        } catch (SQLException e) {
+            if (PesanDb.dataDipakai(e)) {
+                String label = existing.map(Petugas::getNama).orElse(id.trim());
+                throw new DataMasihDipakaiException("Petugas", id.trim(),
+                        "Petugas " + label + " (" + id.trim() + ") memiliki riwayat pemeriksaan dan tidak dapat dihapus permanen. Gunakan fitur Nonaktifkan.");
+            }
+            throw Jdbc.toKlinikException(e, "Petugas", id.trim());
+        }
+    }
+
+    public void toggleAktif(String id, boolean aktif) {
+        if (id == null || id.trim().isEmpty()) {
+            return;
+        }
+        String sql = "UPDATE petugas SET status_aktif = ? WHERE id_petugas = ?";
+        try (Connection conn = DatabaseConnection.getConnection();
+             PreparedStatement ps = conn.prepareStatement(sql)) {
+            ps.setBoolean(1, aktif);
+            ps.setString(2, id.trim());
+            if (ps.executeUpdate() == 0) {
+                throw new DataNotFoundException("Petugas dengan ID " + id + " tidak ditemukan.");
+            }
+        } catch (SQLException e) {
+            throw Jdbc.toKlinikException(e, "Petugas", id);
         }
     }
 
     @Override
-    public synchronized void delete(String id) {
-        if (id != null) {
-            storage.remove(id);
-            saveToFile();
-        }
-    }
-
-    public synchronized void toggleAktif(String id, boolean aktif) {
-        Petugas petugas = storage.get(id);
-        if (petugas != null) {
-            petugas.setAktif(aktif);
-            saveToFile();
-        }
-    }
-
-    @Override
-    public synchronized Optional<Petugas> findById(String id) {
-        if (id == null) {
+    public Optional<Petugas> findById(String id) {
+        if (id == null || id.trim().isEmpty()) {
             return Optional.empty();
         }
-        return Optional.ofNullable(storage.get(id));
+        String sql = "SELECT id_petugas, nama, alamat, no_telepon, username, password_hash, role, id_dokter, status_aktif "
+                   + "FROM petugas WHERE id_petugas = ?";
+        try (Connection conn = DatabaseConnection.getConnection();
+             PreparedStatement ps = conn.prepareStatement(sql)) {
+            ps.setString(1, id.trim());
+            try (ResultSet rs = ps.executeQuery()) {
+                if (rs.next()) {
+                    return Optional.of(mapRow(rs));
+                }
+            }
+        } catch (SQLException e) {
+            throw Jdbc.toKlinikException(e, "Petugas", id);
+        }
+        return Optional.empty();
     }
 
     @Override
-    public synchronized List<Petugas> findAll() {
-        return new ArrayList<>(storage.values());
+    public List<Petugas> findAll() {
+        List<Petugas> list = new ArrayList<>();
+        String sql = "SELECT id_petugas, nama, alamat, no_telepon, username, password_hash, role, id_dokter, status_aktif "
+                   + "FROM petugas ORDER BY id_petugas";
+        try (Connection conn = DatabaseConnection.getConnection();
+             PreparedStatement ps = conn.prepareStatement(sql);
+             ResultSet rs = ps.executeQuery()) {
+            while (rs.next()) {
+                list.add(mapRow(rs));
+            }
+        } catch (SQLException e) {
+            throw Jdbc.toKlinikException(e, "Petugas", null);
+        }
+        return list;
     }
 
-    public synchronized List<Petugas> findActive() {
-        return storage.values().stream()
-                .filter(Petugas::isAktif)
-                .collect(Collectors.toList());
+    public List<Petugas> findActive() {
+        List<Petugas> list = new ArrayList<>();
+        String sql = "SELECT id_petugas, nama, alamat, no_telepon, username, password_hash, role, id_dokter, status_aktif "
+                   + "FROM petugas WHERE status_aktif = TRUE ORDER BY id_petugas";
+        try (Connection conn = DatabaseConnection.getConnection();
+             PreparedStatement ps = conn.prepareStatement(sql);
+             ResultSet rs = ps.executeQuery()) {
+            while (rs.next()) {
+                list.add(mapRow(rs));
+            }
+        } catch (SQLException e) {
+            throw Jdbc.toKlinikException(e, "Petugas", null);
+        }
+        return list;
     }
 
     /**
      * Mencari petugas berdasarkan username (case-insensitive).
      */
-    public synchronized Optional<Petugas> cariByUsername(String username) {
+    public Optional<Petugas> cariByUsername(String username) {
         if (username == null || username.trim().isEmpty()) {
             return Optional.empty();
         }
-        String clean = username.trim();
-        return storage.values().stream()
-                .filter(p -> p.getUsername() != null && p.getUsername().equalsIgnoreCase(clean))
-                .findFirst();
+        String sql = "SELECT id_petugas, nama, alamat, no_telepon, username, password_hash, role, id_dokter, status_aktif "
+                   + "FROM petugas WHERE lower(username) = lower(?)";
+        try (Connection conn = DatabaseConnection.getConnection();
+             PreparedStatement ps = conn.prepareStatement(sql)) {
+            ps.setString(1, username.trim());
+            try (ResultSet rs = ps.executeQuery()) {
+                if (rs.next()) {
+                    return Optional.of(mapRow(rs));
+                }
+            }
+        } catch (SQLException e) {
+            throw Jdbc.toKlinikException(e, "Petugas", username);
+        }
+        return Optional.empty();
     }
 
-    public synchronized Optional<Petugas> findByUsername(String username) {
+    public Optional<Petugas> findByUsername(String username) {
         return cariByUsername(username);
     }
 
     /**
-     * Memvalidasi bahwa objek petugas ditemukan dan memiliki status aktif (status_aktif = true).
+     * BR-01: Memvalidasi bahwa objek petugas ditemukan dan memiliki status aktif (status_aktif = true).
      */
-    public synchronized void validasiStatusAktif(Petugas petugas) throws DataNotFoundException, DataTidakValidException {
+    public void validasiStatusAktif(Petugas petugas) throws DataNotFoundException, DataTidakValidException {
         if (petugas == null) {
             throw new DataNotFoundException("Data petugas tidak ditemukan.");
         }
@@ -284,84 +243,32 @@ public class PetugasDAO implements GenericDAO<Petugas, String> {
     /**
      * Mencari petugas berdasarkan username sekaligus memvalidasi status_aktif.
      */
-    public synchronized Petugas cariAktifByUsername(String username) throws DataNotFoundException, DataTidakValidException {
+    public Petugas cariAktifByUsername(String username) throws DataNotFoundException, DataTidakValidException {
         Petugas petugas = cariByUsername(username)
                 .orElseThrow(() -> new DataNotFoundException("Petugas dengan username '" + username + "' tidak ditemukan."));
         validasiStatusAktif(petugas);
         return petugas;
     }
 
+    private Petugas mapRow(ResultSet rs) throws SQLException {
+        return new Petugas(
+                rs.getString("id_petugas"),
+                rs.getString("nama"),
+                null,
+                rs.getString("alamat"),
+                rs.getString("no_telepon"),
+                rs.getBoolean("status_aktif"),
+                rs.getString("username"),
+                rs.getString("password_hash"),
+                Role.fromString(rs.getString("role")),
+                rs.getString("id_dokter")
+        );
+    }
+
     private void ensurePasswordHashed(Petugas petugas) {
         String pwd = petugas.getPassword();
         if (pwd != null && !pwd.isEmpty() && !pwd.contains(":")) {
-            try {
-                petugas.setPassword(PasswordUtil.hashPassword(pwd));
-            } catch (DataTidakValidException ignored) {
-            }
+            petugas.setPassword(PasswordUtil.hashPassword(pwd));
         }
-    }
-
-    private synchronized void saveToFile() {
-        try (PrintWriter writer = new PrintWriter(new FileWriter(filePath))) {
-            for (Petugas p : storage.values()) {
-                String line = String.join("|",
-                        escape(p.getId()),
-                        escape(p.getNama()),
-                        p.getJenisKelamin() != null ? p.getJenisKelamin().name() : "",
-                        escape(p.getAlamat()),
-                        escape(p.getNoTelepon()),
-                        String.valueOf(p.isAktif()),
-                        escape(p.getUsername()),
-                        p.getPassword() != null ? p.getPassword() : "",
-                        p.getRole() != null ? p.getRole().name() : Role.PETUGAS.name(),
-                        escape(p.getIdDokter())
-                );
-                writer.println(line);
-            }
-        } catch (IOException e) {
-            System.err.println("Gagal menyimpan data petugas: " + e.getMessage());
-        }
-    }
-
-    private synchronized void loadFromFile() {
-        storage.clear();
-        try (BufferedReader reader = new BufferedReader(new FileReader(filePath))) {
-            String line;
-            while ((line = reader.readLine()) != null) {
-                if (line.trim().isEmpty()) continue;
-                String[] parts = line.split("\\|", -1);
-                if (parts.length >= 9) {
-                    String id = unescape(parts[0]);
-                    String nama = unescape(parts[1]);
-                    JenisKelamin jk = JenisKelamin.fromString(parts[2]);
-                    String alamat = unescape(parts[3]);
-                    String noTelp = unescape(parts[4]);
-                    boolean aktif = Boolean.parseBoolean(parts[5]);
-                    String username = unescape(parts[6]);
-                    String password = parts[7];
-                    Role role = Role.fromString(parts[8]);
-                    String idDokter = parts.length >= 10 ? unescape(parts[9]) : "";
-                    if (role == Role.DOKTER && idDokter.isEmpty()) {
-                        idDokter = "DKT-001";
-                    }
-
-                    Petugas p = new Petugas(id, nama, jk, alamat, noTelp, aktif, username, password, role, idDokter);
-                    storage.put(id, p);
-                    updateCounterFromId(id);
-                }
-            }
-        } catch (IOException e) {
-            System.err.println("Gagal memuat data petugas: " + e.getMessage());
-        }
-    }
-
-    private String escape(String val) {
-        if (val == null) return "";
-        return val.replace("\n", "\\n").replace("|", "/");
-    }
-
-    private String unescape(String val) {
-        if (val == null) return "";
-        return val.replace("\\n", "\n");
     }
 }

@@ -64,6 +64,12 @@ public class AlurPelayananSampaiPembayaranTest {
 
     @AfterEach
     void tearDown() throws IOException {
+        if (pasienDAO != null) {
+            try {
+                pasienDAO.delete("PSN-TEST-1");
+            } catch (Exception ignored) {
+            }
+        }
         cleanTestDataDirectory();
     }
 
@@ -109,7 +115,11 @@ public class AlurPelayananSampaiPembayaranTest {
     @DisplayName("2. Uji Alur Lengkap: Pelayanan Pasien dari Pendaftaran, Rekam Medis, hingga Pembayaran")
     void testAlurPelayananSampaiPembayaranLengkap() throws Exception {
         // Step 1: Pasien mendaftar
-        Pasien pasien = new Pasien("PSN-TEST-1", "Budi Santoso", JenisKelamin.LAKI_LAKI,
+        try {
+            pasienDAO.delete("PSN-TEST-1");
+        } catch (Exception ignored) {
+        }
+        Pasien pasien = new Pasien("PSN-TEST-1", "3273019999990001", "Budi Santoso", JenisKelamin.LAKI_LAKI,
                 LocalDate.of(1990, 5, 12), "Jl. Kaliurang", "081234567890", "0001234567890", LocalDate.now(), true);
         pasienDAO.insert(pasien);
 

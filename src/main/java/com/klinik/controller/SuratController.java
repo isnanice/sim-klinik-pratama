@@ -149,15 +149,15 @@ public class SuratController {
     }
 
     /**
-     * Menandai surat berstatus DITERUSKAN menjadi DISERAHKAN oleh Petugas/Admin.
+     * FR-30: Menandai surat berstatus DITERUSKAN menjadi DISERAHKAN oleh Petugas/Admin.
      */
     public Surat tandaiDiserahkan(String idSurat)
             throws AksesDitolakException, DataNotFoundException, DataTidakValidException {
         HakAkses.periksaAkses(HakAkses.SERAHKAN_SURAT);
         Petugas current = SesiPengguna.getSession();
-        String diserahkanOleh = current != null && current.getNama() != null && !current.getNama().isEmpty()
-                ? current.getNama()
-                : (current != null ? current.getUsername() : "Petugas");
+        String diserahkanOleh = current != null && current.getUsername() != null && !current.getUsername().isEmpty()
+                ? current.getUsername()
+                : (current != null && current.getNama() != null ? current.getNama() : "petugas");
         return suratDAO.ubahStatusDiserahkan(idSurat, diserahkanOleh);
     }
 
@@ -181,6 +181,6 @@ public class SuratController {
         if (current.getIdDokter() != null && !current.getIdDokter().trim().isEmpty()) {
             return current.getIdDokter().trim();
         }
-        return "DKT-001";
+        return "DKT-006";
     }
 }
