@@ -14,7 +14,7 @@ import java.util.Properties;
  * Pembuat koneksi PostgreSQL. Setiap pemanggilan getConnection() menghasilkan koneksi baru,
  * jadi DAO memakainya dengan try-with-resources dan koneksi tertutup otomatis.
  *
- * Urutan sumber konfigurasi:
+ * Urutan sumber konfigurasi (yang pertama ditemukan dipakai):
  *   1. Variabel lingkungan KLINIK_DB_URL, KLINIK_DB_USER, KLINIK_DB_PASSWORD
  *   2. Berkas db.properties di folder proyek (atau jalur lain lewat -Dklinik.config=...)
  */
@@ -83,7 +83,6 @@ public final class DatabaseConnection {
                     throw new SQLException("Gagal membaca " + jalur.toAbsolutePath() + ": " + e.getMessage(), e);
                 }
             } else {
-                // Fallback default jika db.properties belum ada
                 p.setProperty("db.url", "jdbc:postgresql://localhost:5432/db_klinik_pratama");
                 p.setProperty("db.user", "klinik_user");
                 p.setProperty("db.password", "klinik123");

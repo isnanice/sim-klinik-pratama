@@ -1,17 +1,41 @@
 package com.klinik.view;
 
 import com.klinik.controller.PasienController;
+import com.klinik.exception.AksesDitolakException;
 import com.klinik.exception.DataMasihDipakaiException;
 import com.klinik.exception.DataTidakValidException;
 import com.klinik.model.JenisKelamin;
 import com.klinik.model.Pasien;
+import com.klinik.model.Role;
+import com.klinik.util.HakAkses;
 import com.klinik.view.component.TableStyleHelper;
 import com.klinik.view.theme.UITheme;
 
-import javax.swing.*;
+import javax.swing.BorderFactory;
+import javax.swing.Box;
+import javax.swing.BoxLayout;
+import javax.swing.ButtonGroup;
+import javax.swing.JButton;
+import javax.swing.JCheckBox;
+import javax.swing.JComboBox;
+import javax.swing.JComponent;
+import javax.swing.JLabel;
+import javax.swing.JOptionPane;
+import javax.swing.JPanel;
+import javax.swing.JRadioButton;
+import javax.swing.JScrollPane;
+import javax.swing.JSpinner;
+import javax.swing.JTable;
+import javax.swing.JTextArea;
+import javax.swing.JTextField;
+import javax.swing.SpinnerDateModel;
 import javax.swing.border.EmptyBorder;
 import javax.swing.table.DefaultTableModel;
-import java.awt.*;
+import java.awt.BorderLayout;
+import java.awt.Component;
+import java.awt.Dimension;
+import java.awt.FlowLayout;
+import java.awt.GridLayout;
 import java.time.LocalDate;
 import java.time.ZoneId;
 import java.time.format.DateTimeFormatter;
@@ -21,8 +45,8 @@ import java.util.List;
 
 /**
  * Tampilan Kelola Data Pasien.
- * Pola layout sama dengan DokterView: Form di atas (NORTH), Toolbar & Pencarian, Tabel di bawah (CENTER).
- * Pasien dapat dikelola oleh ADMIN maupun PETUGAS.
+ * Terintegrasi dengan PasienController, DetailDialog (untuk DapatDicetak),
+ * TableStyleHelper, serta otorisasi HakAkses.
  */
 public class PasienView extends JPanel {
     private static final LocalDate DEFAULT_TANGGAL_LAHIR = LocalDate.of(2000, 1, 1);
@@ -32,6 +56,7 @@ public class PasienView extends JPanel {
 
     // Komponen Form
     private JTextField txtId;
+    private JTextField txtNik;
     private JTextField txtNama;
     private JRadioButton rbLaki;
     private JRadioButton rbPerempuan;
@@ -41,6 +66,7 @@ public class PasienView extends JPanel {
     private JTextField txtNoTelepon;
     private JTextField txtNoBpjs;
     private JCheckBox chkAktif;
+    private JLabel lblRoleNote;
 
     // Tombol Form
     private JButton btnTambah;
@@ -55,13 +81,15 @@ public class PasienView extends JPanel {
     private JComboBox<String> cmbKriteria;
     private JButton btnCari;
     private JButton btnReset;
+    private JTable tabel;
     private JTable tblPasien;
     private DefaultTableModel tableModel;
 
     public PasienView(PasienController controller) {
         this.controller = controller;
         initComponents();
-        setupEvents();
+        pasangListener();
+        applyRolePermissions();
         refreshTable();
     }
 
@@ -77,6 +105,12 @@ public class PasienView extends JPanel {
         lblTitle.setFont(UITheme.FONT_TITLE);
         lblTitle.setForeground(UITheme.PRIMARY);
         headerPanel.add(lblTitle, BorderLayout.WEST);
+
+        lblRoleNote = new JLabel("Mode Baca: Role Anda hanya diizinkan melihat dan mencari data pasien.");
+        lblRoleNote.setFont(UITheme.FONT_MUTED);
+        lblRoleNote.setForeground(UITheme.TEXT_MUTED);
+        lblRoleNote.setVisible(false);
+        headerPanel.add(lblRoleNote, BorderLayout.EAST);
 
         // FORM SECTION (NORTH)
         JPanel northContainer = new JPanel();
@@ -95,6 +129,7 @@ public class PasienView extends JPanel {
         leftCol.setOpaque(false);
 
         txtId = UITheme.createReadOnlyField();
+        txtNik = UITheme.createTextField();
         txtNama = UITheme.createTextField();
 
         rbLaki = new JRadioButton("Laki-laki");
@@ -113,7 +148,7 @@ public class PasienView extends JPanel {
         genderPanel.add(rbLaki);
         genderPanel.add(rbPerempuan);
 
-        txtAlamat = new JTextArea(3, 20);
+        txtAlamat = new JTextArea(2, 20);
         txtAlamat.setFont(UITheme.FONT_REGULAR);
         txtAlamat.setBorder(UITheme.createFieldBorder());
         txtAlamat.setLineWrap(true);
@@ -122,6 +157,7 @@ public class PasienView extends JPanel {
         spAlamat.setBorder(BorderFactory.createLineBorder(UITheme.BORDER));
 
         addField(leftCol, "ID Pasien", txtId);
+        addField(leftCol, "NIK (16 digit, opsional)", txtNik);
         addField(leftCol, "Nama *", txtNama);
         addField(leftCol, "Jenis Kelamin *", genderPanel);
         addField(leftCol, "Alamat", spAlamat);
@@ -179,7 +215,7 @@ public class PasienView extends JPanel {
         searchPanel.setOpaque(false);
         JLabel lblCari = new JLabel("Cari berdasarkan:");
         lblCari.setFont(UITheme.FONT_REGULAR);
-        cmbKriteria = new JComboBox<>(new String[]{"Semua", "ID", "Nama", "No. BPJS"});
+        cmbKriteria = new JComboBox<>(new String[]{"Semua", "ID", "NIK", "Nama", "No. BPJS"});
         cmbKriteria.setFont(UITheme.FONT_REGULAR);
         cmbKriteria.setPreferredSize(new Dimension(120, 30));
 
@@ -200,7 +236,7 @@ public class PasienView extends JPanel {
         add(northContainer, BorderLayout.NORTH);
 
         // TABLE SECTION (CENTER)
-        String[] columns = {"ID", "Nama", "Jenis Kelamin", "Tgl Lahir", "No. Telepon", "No. BPJS", "Status"};
+        String[] columns = {"ID", "NIK", "Nama", "Jenis Kelamin", "Tgl Lahir", "No. Telepon", "No. BPJS", "Status"};
         tableModel = new DefaultTableModel(columns, 0) {
             @Override
             public boolean isCellEditable(int row, int column) {
@@ -208,9 +244,10 @@ public class PasienView extends JPanel {
             }
         };
 
-        tblPasien = new JTable(tableModel);
-        TableStyleHelper.applyStyle(tblPasien);
-        JScrollPane tableScroll = new JScrollPane(tblPasien);
+        tabel = new JTable(tableModel);
+        tblPasien = tabel;
+        TableStyleHelper.applyStyle(tabel);
+        JScrollPane tableScroll = new JScrollPane(tabel);
         tableScroll.setBorder(BorderFactory.createLineBorder(UITheme.BORDER));
         tableScroll.getViewport().setBackground(UITheme.SURFACE);
 
@@ -231,32 +268,60 @@ public class PasienView extends JPanel {
         panel.add(Box.createVerticalStrut(8));
     }
 
-    private void setupEvents() {
-        btnTambah.addActionListener(e -> tambahData());
-        btnUbah.addActionListener(e -> ubahData());
-        btnHapus.addActionListener(e -> hapusData());
-        btnNonaktifkan.addActionListener(e -> toggleAktifData());
-        btnDetail.addActionListener(e -> tampilkanDetail());
-        btnBersihkan.addActionListener(e -> bersihkanForm());
+    private void pasangListener() {
+        btnTambah.addActionListener(e -> aksiTambah());
+        btnUbah.addActionListener(e -> aksiUbah());
+        btnHapus.addActionListener(e -> aksiHapus());
+        btnNonaktifkan.addActionListener(e -> aksiNonaktifkan());
+        btnDetail.addActionListener(e -> aksiDetail());
+        btnCari.addActionListener(e -> aksiCari());
+        btnReset.addActionListener(e -> aksiReset());
+        btnBersihkan.addActionListener(e -> kosongkanForm());
+        txtCari.addActionListener(e -> aksiCari());
 
-        btnCari.addActionListener(e -> cariData());
-        txtCari.addActionListener(e -> cariData());
-        btnReset.addActionListener(e -> {
-            txtCari.setText("");
-            cmbKriteria.setSelectedIndex(0);
-            refreshTable();
-        });
-
-        tblPasien.getSelectionModel().addListSelectionListener(e -> {
-            if (!e.getValueIsAdjusting() && tblPasien.getSelectedRow() != -1) {
-                isiFormDariTabel(tblPasien.getSelectedRow());
+        tabel.getSelectionModel().addListSelectionListener(e -> {
+            if (!e.getValueIsAdjusting()) {
+                isiFormDariBaris();
             }
         });
     }
 
-    // ---------- Tabel ----------
+    public void applyRolePermissions() {
+        boolean canManage = HakAkses.memilikiAkses(HakAkses.KELOLA_PASIEN);
+        lblRoleNote.setVisible(!canManage);
 
-    private void refreshTable() {
+        txtNik.setEnabled(canManage);
+        txtNik.setBackground(canManage ? UITheme.SURFACE : UITheme.READ_ONLY_BG);
+        txtNama.setEnabled(canManage);
+        txtNama.setBackground(canManage ? UITheme.SURFACE : UITheme.READ_ONLY_BG);
+        rbLaki.setEnabled(canManage);
+        rbPerempuan.setEnabled(canManage);
+        spnTanggalLahir.setEnabled(canManage);
+        txtAlamat.setEnabled(canManage);
+        txtAlamat.setBackground(canManage ? UITheme.SURFACE : UITheme.READ_ONLY_BG);
+        txtNoTelepon.setEnabled(canManage);
+        txtNoTelepon.setBackground(canManage ? UITheme.SURFACE : UITheme.READ_ONLY_BG);
+        txtNoBpjs.setEnabled(canManage);
+        txtNoBpjs.setBackground(canManage ? UITheme.SURFACE : UITheme.READ_ONLY_BG);
+        chkAktif.setEnabled(canManage);
+
+        btnTambah.setEnabled(canManage);
+        btnUbah.setEnabled(canManage);
+        btnHapus.setEnabled(canManage);
+        btnNonaktifkan.setEnabled(canManage);
+        btnBersihkan.setEnabled(canManage);
+    }
+
+    public void setRole(Role role) {
+        boolean canManage = HakAkses.memilikiAkses(role, HakAkses.KELOLA_PASIEN);
+        lblRoleNote.setVisible(!canManage);
+        btnTambah.setEnabled(canManage);
+        btnUbah.setEnabled(canManage);
+        btnHapus.setEnabled(canManage);
+        btnNonaktifkan.setEnabled(canManage);
+    }
+
+    public void refreshTable() {
         populateTable(controller.getAllPasien());
     }
 
@@ -265,6 +330,7 @@ public class PasienView extends JPanel {
         for (Pasien p : list) {
             tableModel.addRow(new Object[]{
                     p.getId(),
+                    p.getNik() != null && !p.getNik().isEmpty() ? p.getNik() : "-",
                     p.getNama(),
                     p.getJenisKelamin() != null ? p.getJenisKelamin().getLabel() : "-",
                     p.getTanggalLahir() != null ? p.getTanggalLahir().format(FORMAT_TANGGAL) : "-",
@@ -275,11 +341,16 @@ public class PasienView extends JPanel {
         }
     }
 
-    private void isiFormDariTabel(int row) {
+    private void isiFormDariBaris() {
+        int row = tabel.getSelectedRow();
+        if (row == -1) {
+            return;
+        }
         String id = (String) tableModel.getValueAt(row, 0);
         try {
             Pasien p = controller.getPasienById(id);
             txtId.setText(p.getId());
+            txtNik.setText(p.getNik() != null ? p.getNik() : "");
             txtNama.setText(p.getNama());
             if (p.getJenisKelamin() == JenisKelamin.PEREMPUAN) {
                 rbPerempuan.setSelected(true);
@@ -297,8 +368,9 @@ public class PasienView extends JPanel {
         }
     }
 
-    private void bersihkanForm() {
+    private void kosongkanForm() {
         txtId.setText("");
+        txtNik.setText("");
         txtNama.setText("");
         rbLaki.setSelected(true);
         spnTanggalLahir.setValue(toDate(DEFAULT_TANGGAL_LAHIR));
@@ -307,14 +379,12 @@ public class PasienView extends JPanel {
         txtNoBpjs.setText("");
         chkAktif.setSelected(true);
         btnNonaktifkan.setText("Nonaktifkan");
-        tblPasien.clearSelection();
+        tabel.clearSelection();
     }
 
-    // ---------- Aksi ----------
-
-    /** Membaca isi form menjadi objek Pasien (belum divalidasi; validasi ada di controller). */
-    private Pasien bacaForm() {
+    private Pasien bacaForm() throws DataTidakValidException {
         Pasien p = new Pasien();
+        p.setNik(txtNik.getText());
         p.setNama(txtNama.getText());
         p.setJenisKelamin(rbPerempuan.isSelected() ? JenisKelamin.PEREMPUAN : JenisKelamin.LAKI_LAKI);
         p.setTanggalLahir(toLocalDate((Date) spnTanggalLahir.getValue()));
@@ -325,22 +395,24 @@ public class PasienView extends JPanel {
         return p;
     }
 
-    private void tambahData() {
+    private void aksiTambah() {
         try {
             Pasien p = bacaForm();
-            controller.tambahPasien(p);
+            controller.tambah(p);
             JOptionPane.showMessageDialog(this, "Data pasien berhasil ditambahkan dengan ID: " + p.getId(),
                     "Sukses", JOptionPane.INFORMATION_MESSAGE);
-            bersihkanForm();
+            kosongkanForm();
             refreshTable();
         } catch (DataTidakValidException e) {
             JOptionPane.showMessageDialog(this, e.getMessage(), "Validasi Gagal", JOptionPane.WARNING_MESSAGE);
+        } catch (AksesDitolakException e) {
+            JOptionPane.showMessageDialog(this, e.getMessage(), "Akses Ditolak", JOptionPane.ERROR_MESSAGE);
         } catch (Exception e) {
             tampilkanError(e);
         }
     }
 
-    private void ubahData() {
+    private void aksiUbah() {
         String id = txtId.getText().trim();
         if (id.isEmpty()) {
             JOptionPane.showMessageDialog(this, "Pilih data pasien dari tabel yang ingin diubah.",
@@ -352,19 +424,21 @@ public class PasienView extends JPanel {
             Pasien p = bacaForm();
             p.setId(id);
             p.setTanggalRegistrasi(lama.getTanggalRegistrasi());
-            controller.ubahPasien(p);
+            controller.ubah(p);
             JOptionPane.showMessageDialog(this, "Data pasien berhasil diperbarui.",
                     "Sukses", JOptionPane.INFORMATION_MESSAGE);
-            bersihkanForm();
+            kosongkanForm();
             refreshTable();
         } catch (DataTidakValidException e) {
             JOptionPane.showMessageDialog(this, e.getMessage(), "Validasi Gagal", JOptionPane.WARNING_MESSAGE);
+        } catch (AksesDitolakException e) {
+            JOptionPane.showMessageDialog(this, e.getMessage(), "Akses Ditolak", JOptionPane.ERROR_MESSAGE);
         } catch (Exception e) {
             tampilkanError(e);
         }
     }
 
-    private void hapusData() {
+    private void aksiHapus() {
         String id = txtId.getText().trim();
         if (id.isEmpty()) {
             JOptionPane.showMessageDialog(this, "Pilih data pasien yang akan dihapus.", "Peringatan", JOptionPane.WARNING_MESSAGE);
@@ -379,35 +453,47 @@ public class PasienView extends JPanel {
         }
 
         try {
-            controller.hapusPasien(id);
+            controller.hapus(id);
             JOptionPane.showMessageDialog(this, "Data pasien berhasil dihapus.", "Sukses", JOptionPane.INFORMATION_MESSAGE);
-            bersihkanForm();
+            kosongkanForm();
             refreshTable();
         } catch (DataMasihDipakaiException e) {
-            int opt = JOptionPane.showOptionDialog(this,
-                    e.getMessage(),
-                    "Data Tidak Dapat Dihapus",
-                    JOptionPane.YES_NO_OPTION,
-                    JOptionPane.WARNING_MESSAGE,
-                    null,
-                    new Object[]{"Nonaktifkan", "Batal"},
-                    "Nonaktifkan");
-            if (opt == 0) {
-                try {
-                    controller.nonaktifkanPasien(id, false);
-                    JOptionPane.showMessageDialog(this, "Pasien berhasil dinonaktifkan.", "Sukses", JOptionPane.INFORMATION_MESSAGE);
-                    bersihkanForm();
-                    refreshTable();
-                } catch (Exception ex) {
-                    tampilkanError(ex);
-                }
-            }
+            tawarkanNonaktif(id, e.getMessage());
+        } catch (AksesDitolakException e) {
+            JOptionPane.showMessageDialog(this, e.getMessage(), "Akses Ditolak", JOptionPane.ERROR_MESSAGE);
         } catch (Exception e) {
             tampilkanError(e);
         }
     }
 
-    private void toggleAktifData() {
+    private void tawarkanNonaktif(String id, String pesan) {
+        int opt = JOptionPane.showOptionDialog(this,
+                pesan,
+                "Data Tidak Dapat Dihapus",
+                JOptionPane.YES_NO_OPTION,
+                JOptionPane.WARNING_MESSAGE,
+                null,
+                new Object[]{"Nonaktifkan", "Batal"},
+                "Nonaktifkan");
+        if (opt == 0) {
+            aksiNonaktifkan(id);
+        }
+    }
+
+    private void aksiNonaktifkan(String id) {
+        try {
+            controller.nonaktifkan(id);
+            JOptionPane.showMessageDialog(this, "Pasien berhasil dinonaktifkan.", "Sukses", JOptionPane.INFORMATION_MESSAGE);
+            kosongkanForm();
+            refreshTable();
+        } catch (AksesDitolakException e) {
+            JOptionPane.showMessageDialog(this, e.getMessage(), "Akses Ditolak", JOptionPane.ERROR_MESSAGE);
+        } catch (Exception ex) {
+            tampilkanError(ex);
+        }
+    }
+
+    private void aksiNonaktifkan() {
         String id = txtId.getText().trim();
         if (id.isEmpty()) {
             JOptionPane.showMessageDialog(this, "Pilih data pasien dari tabel.", "Peringatan", JOptionPane.WARNING_MESSAGE);
@@ -415,40 +501,49 @@ public class PasienView extends JPanel {
         }
         try {
             Pasien p = controller.getPasienById(id);
-            boolean statusBaru = !p.isAktif();
-            controller.nonaktifkanPasien(id, statusBaru);
-            JOptionPane.showMessageDialog(this,
-                    "Pasien " + p.getNama() + " berhasil di" + (statusBaru ? "aktifkan." : "nonaktifkan."),
-                    "Sukses", JOptionPane.INFORMATION_MESSAGE);
-            bersihkanForm();
-            refreshTable();
+            if (p.isAktif()) {
+                aksiNonaktifkan(id);
+            } else {
+                controller.nonaktifkanPasien(id, true);
+                JOptionPane.showMessageDialog(this,
+                        "Pasien " + p.getNama() + " berhasil diaktifkan.",
+                        "Sukses", JOptionPane.INFORMATION_MESSAGE);
+                kosongkanForm();
+                refreshTable();
+            }
+        } catch (AksesDitolakException e) {
+            JOptionPane.showMessageDialog(this, e.getMessage(), "Akses Ditolak", JOptionPane.ERROR_MESSAGE);
         } catch (Exception e) {
             tampilkanError(e);
         }
     }
 
-    private void tampilkanDetail() {
+    private void aksiDetail() {
         String id = txtId.getText().trim();
         if (id.isEmpty()) {
             JOptionPane.showMessageDialog(this, "Pilih baris pasien pada tabel untuk melihat detail.", "Peringatan", JOptionPane.WARNING_MESSAGE);
             return;
         }
         try {
-            DetailDialog.show(this, "Detail Pasien", controller.getPasienById(id));
+            DetailDialog.tampilkan(this, "Detail Pasien", controller.getPasienById(id));
         } catch (Exception e) {
             tampilkanError(e);
         }
     }
 
-    private void cariData() {
+    private void aksiCari() {
         populateTable(controller.cariPasien(txtCari.getText(), (String) cmbKriteria.getSelectedItem()));
     }
 
-    private void tampilkanError(Exception e) {
-        JOptionPane.showMessageDialog(this, "Terjadi kesalahan: " + e.getMessage(), "Error", JOptionPane.ERROR_MESSAGE);
+    private void aksiReset() {
+        txtCari.setText("");
+        cmbKriteria.setSelectedIndex(0);
+        refreshTable();
     }
 
-    // ---------- Konversi tanggal (JSpinner memakai java.util.Date, model memakai LocalDate) ----------
+    private void tampilkanError(Exception ex) {
+        JOptionPane.showMessageDialog(this, "Terjadi kesalahan: " + ex.getMessage(), "Error", JOptionPane.ERROR_MESSAGE);
+    }
 
     private static Date toDate(LocalDate d) {
         return Date.from(d.atStartOfDay(ZoneId.systemDefault()).toInstant());

@@ -54,7 +54,7 @@ public class LayananView extends JPanel {
     public LayananView(LayananController controller) {
         this.controller = controller;
         initComponents();
-        setupEvents();
+        pasangListener();
         refreshTable();
         applyRolePermissions();
     }
@@ -211,7 +211,7 @@ public class LayananView extends JPanel {
         panel.add(Box.createVerticalStrut(8));
     }
 
-    private void setupEvents() {
+    private void pasangListener() {
         btnTambah.addActionListener(e -> tambahData());
         btnUbah.addActionListener(e -> ubahData());
         btnNonaktifkan.addActionListener(e -> toggleAktifData());

@@ -7,7 +7,7 @@ import java.util.Objects;
 /**
  * Kelas abstrak Orang untuk hierarki entitas individu dalam klinik (Pasien, Dokter, Petugas).
  */
-public abstract class Orang implements DapatDicetak {
+public abstract class Orang {
     protected String id;
     protected String nama;
     protected JenisKelamin jenisKelamin;
@@ -19,12 +19,20 @@ public abstract class Orang implements DapatDicetak {
         this.aktif = true;
     }
 
+    public Orang(String id, String nama, String alamat, String noTelepon) {
+        setId(id);
+        setNama(nama);
+        setAlamat(alamat);
+        setNoTelepon(noTelepon);
+        this.aktif = true;
+    }
+
     public Orang(String id, String nama, JenisKelamin jenisKelamin, String alamat, String noTelepon, boolean aktif) {
-        this.id = id;
-        this.nama = nama;
+        this.id = id != null ? id.trim() : null;
+        this.nama = nama != null ? nama.trim() : null;
         this.jenisKelamin = jenisKelamin;
-        this.alamat = alamat;
-        this.noTelepon = noTelepon;
+        this.alamat = alamat != null ? alamat.trim() : "";
+        this.noTelepon = noTelepon != null ? noTelepon.trim() : null;
         this.aktif = aktif;
     }
 
@@ -32,7 +40,7 @@ public abstract class Orang implements DapatDicetak {
         return id;
     }
 
-    public void setId(String id) throws DataTidakValidException {
+    public final void setId(String id) throws DataTidakValidException {
         if (id != null && id.trim().isEmpty()) {
             throw new DataTidakValidException("ID", "ID tidak boleh berupa string kosong.");
         }
@@ -43,7 +51,7 @@ public abstract class Orang implements DapatDicetak {
         return nama;
     }
 
-    public void setNama(String nama) throws DataTidakValidException {
+    public final void setNama(String nama) throws DataTidakValidException {
         if (nama == null || nama.trim().isEmpty()) {
             throw new DataTidakValidException("Nama", "Nama wajib diisi dan tidak boleh kosong.");
         }
@@ -54,7 +62,7 @@ public abstract class Orang implements DapatDicetak {
         return jenisKelamin;
     }
 
-    public void setJenisKelamin(JenisKelamin jenisKelamin) throws DataTidakValidException {
+    public final void setJenisKelamin(JenisKelamin jenisKelamin) throws DataTidakValidException {
         if (jenisKelamin == null) {
             throw new DataTidakValidException("Jenis Kelamin", "Jenis kelamin wajib dipilih.");
         }
@@ -65,7 +73,7 @@ public abstract class Orang implements DapatDicetak {
         return alamat;
     }
 
-    public void setAlamat(String alamat) {
+    public final void setAlamat(String alamat) {
         this.alamat = alamat != null ? alamat.trim() : "";
     }
 
@@ -73,7 +81,7 @@ public abstract class Orang implements DapatDicetak {
         return noTelepon;
     }
 
-    public void setNoTelepon(String noTelepon) throws DataTidakValidException {
+    public final void setNoTelepon(String noTelepon) throws DataTidakValidException {
         if (noTelepon == null || noTelepon.trim().isEmpty()) {
             throw new DataTidakValidException("No. Telepon", "Nomor telepon wajib diisi.");
         }
@@ -88,7 +96,11 @@ public abstract class Orang implements DapatDicetak {
         this.aktif = aktif;
     }
 
-    public abstract String getPeran();
+    public abstract void tampilkanInfo();
+
+    public String getPeran() {
+        return getClass().getSimpleName();
+    }
 
     @Override
     public boolean equals(Object o) {

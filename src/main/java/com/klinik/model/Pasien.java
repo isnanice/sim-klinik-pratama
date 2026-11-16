@@ -21,6 +21,11 @@ public class Pasien extends Orang implements DapatDicetak {
         this.aktif = true;
     }
 
+    public Pasien(String id, String nik, String nama, JenisKelamin jenisKelamin, LocalDate tanggalLahir,
+                  String alamat, String noTelepon, String noBpjs) {
+        this(id, nik, nama, jenisKelamin, tanggalLahir, alamat, noTelepon, noBpjs, LocalDate.now(), true);
+    }
+
     public Pasien(String id, String nama, JenisKelamin jenisKelamin, LocalDate tanggalLahir,
                   String alamat, String noTelepon, String noBpjs, LocalDate tanggalRegistrasi, boolean aktif) {
         this(id, "", nama, jenisKelamin, tanggalLahir, alamat, noTelepon, noBpjs, tanggalRegistrasi, aktif);
@@ -28,7 +33,9 @@ public class Pasien extends Orang implements DapatDicetak {
 
     public Pasien(String id, String nik, String nama, JenisKelamin jenisKelamin, LocalDate tanggalLahir,
                   String alamat, String noTelepon, String noBpjs, LocalDate tanggalRegistrasi, boolean aktif) {
-        super(id, nama, jenisKelamin, alamat, noTelepon, aktif);
+        super(id, nama, alamat, noTelepon);
+        this.jenisKelamin = jenisKelamin;
+        this.aktif = aktif;
         this.nik = nik != null ? nik.trim() : "";
         this.tanggalLahir = tanggalLahir;
         this.noBpjs = noBpjs != null ? noBpjs.trim() : "";
@@ -67,9 +74,26 @@ public class Pasien extends Orang implements DapatDicetak {
         this.tanggalRegistrasi = tanggalRegistrasi != null ? tanggalRegistrasi : LocalDate.now();
     }
 
+    public boolean punyaBpjs() {
+        return noBpjs != null && !noBpjs.trim().isEmpty();
+    }
+
+    public boolean isStatusAktif() {
+        return isAktif();
+    }
+
+    public void setStatusAktif(boolean statusAktif) {
+        setAktif(statusAktif);
+    }
+
     @Override
     public String getPeran() {
         return "Pasien";
+    }
+
+    @Override
+    public void tampilkanInfo() {
+        System.out.println(cetakRingkasan());
     }
 
     @Override

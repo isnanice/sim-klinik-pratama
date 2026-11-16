@@ -56,7 +56,7 @@ public class DokterView extends JPanel {
     public DokterView(DokterController controller) {
         this.controller = controller;
         initComponents();
-        setupEvents();
+        pasangListener();
         refreshTable();
         applyRolePermissions();
     }
@@ -230,7 +230,7 @@ public class DokterView extends JPanel {
         panel.add(Box.createVerticalStrut(8));
     }
 
-    private void setupEvents() {
+    private void pasangListener() {
         btnTambah.addActionListener(e -> tambahData());
         btnUbah.addActionListener(e -> ubahData());
         btnHapus.addActionListener(e -> hapusData());

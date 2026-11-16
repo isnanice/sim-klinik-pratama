@@ -6,32 +6,105 @@ import com.klinik.model.JenisKelamin;
 import com.klinik.util.DatabaseConnection;
 import com.klinik.util.PesanDb;
 
+import java.io.*;
 import java.sql.*;
-import java.util.ArrayList;
-import java.util.List;
-import java.util.Optional;
+import java.util.*;
+import java.util.stream.Collectors;
 
 /**
- * Data Access Object untuk entitas Dokter menggunakan PostgreSQL JDBC.
- * Berinteraksi langsung dengan tabel 'dokter' di db_klinik_pratama.
+ * Data Access Object untuk entitas Dokter.
+ * Terintegrasi dengan database PostgreSQL (default), serta mendukung direktori kustom untuk pengujian.
  */
 public class DokterDAO implements GenericDAO<Dokter, String> {
+    private final String dataDir;
+    private final String filePath;
+    private final Map<String, Dokter> fileStorage = new LinkedHashMap<>();
+    private int counter = 0;
 
-    public String generateNextId() {
-        String sql = "SELECT fn_id('DKT', nextval('seq_dokter'))";
-        try (Connection c = DatabaseConnection.getConnection();
-             Statement st = c.createStatement();
-             ResultSet rs = st.executeQuery(sql)) {
-            if (rs.next()) {
-                return rs.getString(1);
-            }
-        } catch (Exception ignored) {}
-        return "DKT-" + (System.currentTimeMillis() % 1000000);
+    public DokterDAO() {
+        this.dataDir = null;
+        this.filePath = null;
+    }
+
+    public DokterDAO(String dataDir) {
+        this.dataDir = (dataDir != null && !dataDir.trim().isEmpty()) ? dataDir.trim() : null;
+        this.filePath = (this.dataDir != null) ? this.dataDir + File.separator + "dokter.txt" : null;
+        if (this.filePath != null) {
+            initFileStorage();
+        }
+    }
+
+    private boolean isFileMode() {
+        return this.filePath != null;
+    }
+
+    private void initFileStorage() {
+        File dir = new File(dataDir);
+        if (!dir.exists()) {
+            dir.mkdirs();
+        }
+        File file = new File(filePath);
+        if (file.exists()) {
+            loadFromFile();
+        } else {
+            seedInitialFileData();
+            saveToFile();
+        }
+    }
+
+    private void seedInitialFileData() {
+        insert(new Dokter(generateNextId(), "dr. Ani Wijaya", JenisKelamin.PEREMPUAN,
+                "Jl. Malioboro No. 10, Yogyakarta", "081234567890", "STR-11223344", "Umum", true));
+        insert(new Dokter(generateNextId(), "dr. Hadi Nugroho, Sp.PD", JenisKelamin.LAKI_LAKI,
+                "Jl. Kaliurang Km 5, Sleman", "081298765432", "STR-22334455", "Penyakit Dalam", true));
+        insert(new Dokter(generateNextId(), "drg. Maya Indah", JenisKelamin.PEREMPUAN,
+                "Jl. Solo No. 45, Yogyakarta", "085711223344", "STR-33445566", "Gigi", true));
+        insert(new Dokter(generateNextId(), "dr. Budi Santoso, Sp.A", JenisKelamin.LAKI_LAKI,
+                "Jl. Gejayan No. 20, Sleman", "087855667788", "STR-44556677", "Anak", true));
+        insert(new Dokter(generateNextId(), "dr. Eko Prasetyo", JenisKelamin.LAKI_LAKI,
+                "Jl. Bantul Km 7, Bantul", "082133445566", "STR-55667788", "Umum", false));
+    }
+
+    public synchronized String generateNextId() {
+        if (!isFileMode()) {
+            String sql = "SELECT fn_id('DKT', nextval('seq_dokter'))";
+            try (Connection c = DatabaseConnection.getConnection();
+                 Statement st = c.createStatement();
+                 ResultSet rs = st.executeQuery(sql)) {
+                if (rs.next()) {
+                    return rs.getString(1);
+                }
+            } catch (Exception ignored) {}
+        }
+        counter++;
+        return String.format("DKT-%03d", counter);
+    }
+
+    private void updateCounterFromId(String id) {
+        if (id != null && id.startsWith("DKT-")) {
+            try {
+                int val = Integer.parseInt(id.substring(4));
+                if (val > counter) {
+                    counter = val;
+                }
+            } catch (NumberFormatException ignored) {}
+        }
     }
 
     @Override
-    public void insert(Dokter d) {
+    public synchronized void insert(Dokter d) {
         if (d == null) return;
+
+        if (isFileMode()) {
+            if (d.getId() == null || d.getId().trim().isEmpty()) {
+                d.setId(generateNextId());
+            } else {
+                updateCounterFromId(d.getId());
+            }
+            fileStorage.put(d.getId(), d);
+            saveToFile();
+            return;
+        }
 
         String sql = "INSERT INTO dokter (id_dokter, nama, jenis_kelamin, alamat, no_telepon, nomor_registrasi, bidang_pelayanan, status_aktif) "
                    + "VALUES (COALESCE(?, fn_id('DKT', nextval('seq_dokter'))), ?, ?, ?, ?, ?, ?, ?) "
@@ -60,8 +133,14 @@ public class DokterDAO implements GenericDAO<Dokter, String> {
     }
 
     @Override
-    public void update(Dokter d) {
+    public synchronized void update(Dokter d) {
         if (d == null || d.getId() == null) return;
+
+        if (isFileMode()) {
+            fileStorage.put(d.getId(), d);
+            saveToFile();
+            return;
+        }
 
         String sql = "UPDATE dokter SET nama = ?, jenis_kelamin = ?, alamat = ?, no_telepon = ?, "
                    + "nomor_registrasi = ?, bidang_pelayanan = ?, status_aktif = ? WHERE id_dokter = ?";
@@ -85,8 +164,14 @@ public class DokterDAO implements GenericDAO<Dokter, String> {
     }
 
     @Override
-    public void delete(String id) throws DataMasihDipakaiException {
+    public synchronized void delete(String id) throws DataMasihDipakaiException {
         if (id == null) return;
+
+        if (isFileMode()) {
+            fileStorage.remove(id);
+            saveToFile();
+            return;
+        }
 
         String sql = "DELETE FROM dokter WHERE id_dokter = ?";
         try (Connection c = DatabaseConnection.getConnection();
@@ -101,7 +186,16 @@ public class DokterDAO implements GenericDAO<Dokter, String> {
         }
     }
 
-    public void toggleAktif(String id, boolean aktif) {
+    public synchronized void toggleAktif(String id, boolean aktif) {
+        if (isFileMode()) {
+            Dokter d = fileStorage.get(id);
+            if (d != null) {
+                d.setAktif(aktif);
+                saveToFile();
+            }
+            return;
+        }
+
         String sql = "UPDATE dokter SET status_aktif = ? WHERE id_dokter = ?";
         try (Connection c = DatabaseConnection.getConnection();
              PreparedStatement ps = c.prepareStatement(sql)) {
@@ -114,8 +208,13 @@ public class DokterDAO implements GenericDAO<Dokter, String> {
     }
 
     @Override
-    public Optional<Dokter> findById(String id) {
+    public synchronized Optional<Dokter> findById(String id) {
         if (id == null) return Optional.empty();
+
+        if (isFileMode()) {
+            return Optional.ofNullable(fileStorage.get(id));
+        }
+
         String sql = "SELECT * FROM dokter WHERE id_dokter = ?";
         try (Connection c = DatabaseConnection.getConnection();
              PreparedStatement ps = c.prepareStatement(sql)) {
@@ -132,7 +231,11 @@ public class DokterDAO implements GenericDAO<Dokter, String> {
     }
 
     @Override
-    public List<Dokter> findAll() {
+    public synchronized List<Dokter> findAll() {
+        if (isFileMode()) {
+            return new ArrayList<>(fileStorage.values());
+        }
+
         List<Dokter> list = new ArrayList<>();
         String sql = "SELECT * FROM dokter ORDER BY id_dokter";
         try (Connection c = DatabaseConnection.getConnection();
@@ -147,7 +250,11 @@ public class DokterDAO implements GenericDAO<Dokter, String> {
         return list;
     }
 
-    public List<Dokter> findActive() {
+    public synchronized List<Dokter> findActive() {
+        if (isFileMode()) {
+            return fileStorage.values().stream().filter(Dokter::isAktif).collect(Collectors.toList());
+        }
+
         List<Dokter> list = new ArrayList<>();
         String sql = "SELECT * FROM dokter WHERE status_aktif = TRUE ORDER BY id_dokter";
         try (Connection c = DatabaseConnection.getConnection();
@@ -162,10 +269,28 @@ public class DokterDAO implements GenericDAO<Dokter, String> {
         return list;
     }
 
-    public List<Dokter> search(String keyword, String criteria) {
+    public synchronized List<Dokter> search(String keyword, String criteria) {
         if (keyword == null || keyword.trim().isEmpty()) {
             return findAll();
         }
+
+        if (isFileMode()) {
+            String q = keyword.trim().toLowerCase();
+            return fileStorage.values().stream()
+                    .filter(d -> {
+                        if ("Bidang Pelayanan".equalsIgnoreCase(criteria)) {
+                            return d.getBidangPelayanan() != null && d.getBidangPelayanan().toLowerCase().contains(q);
+                        } else if ("Nama".equalsIgnoreCase(criteria)) {
+                            return d.getNama() != null && d.getNama().toLowerCase().contains(q);
+                        } else {
+                            return (d.getNama() != null && d.getNama().toLowerCase().contains(q)) ||
+                                   (d.getId() != null && d.getId().toLowerCase().contains(q)) ||
+                                   (d.getBidangPelayanan() != null && d.getBidangPelayanan().toLowerCase().contains(q));
+                        }
+                    })
+                    .collect(Collectors.toList());
+        }
+
         String q = "%" + keyword.trim().toLowerCase() + "%";
         String sql;
         if ("Nama".equalsIgnoreCase(criteria)) {
@@ -207,5 +332,64 @@ public class DokterDAO implements GenericDAO<Dokter, String> {
         boolean aktif = rs.getBoolean("status_aktif");
 
         return new Dokter(id, nama, jk, alamat, noTelp, noReg, bidang, aktif);
+    }
+
+    private synchronized void saveToFile() {
+        if (filePath == null) return;
+        try (PrintWriter writer = new PrintWriter(new FileWriter(filePath))) {
+            for (Dokter d : fileStorage.values()) {
+                String line = String.join("|",
+                        escape(d.getId()),
+                        escape(d.getNama()),
+                        escape(d.getJenisKelamin() != null ? d.getJenisKelamin().name() : ""),
+                        escape(d.getAlamat()),
+                        escape(d.getNoTelepon()),
+                        escape(d.getNomorRegistrasi()),
+                        escape(d.getBidangPelayanan()),
+                        String.valueOf(d.isAktif())
+                );
+                writer.println(line);
+            }
+        } catch (IOException e) {
+            System.err.println("Gagal menyimpan data dokter ke file: " + e.getMessage());
+        }
+    }
+
+    private synchronized void loadFromFile() {
+        if (filePath == null) return;
+        fileStorage.clear();
+        try (BufferedReader reader = new BufferedReader(new FileReader(filePath))) {
+            String line;
+            while ((line = reader.readLine()) != null) {
+                if (line.trim().isEmpty()) continue;
+                String[] parts = line.split("\\|", -1);
+                if (parts.length >= 8) {
+                    String id = unescape(parts[0]);
+                    String nama = unescape(parts[1]);
+                    JenisKelamin jk = JenisKelamin.fromString(unescape(parts[2]));
+                    String alamat = unescape(parts[3]);
+                    String noTelp = unescape(parts[4]);
+                    String noReg = unescape(parts[5]);
+                    String bidang = unescape(parts[6]);
+                    boolean aktif = Boolean.parseBoolean(parts[7]);
+
+                    Dokter d = new Dokter(id, nama, jk, alamat, noTelp, noReg, bidang, aktif);
+                    fileStorage.put(id, d);
+                    updateCounterFromId(id);
+                }
+            }
+        } catch (IOException e) {
+            System.err.println("Gagal memuat data dokter dari file: " + e.getMessage());
+        }
+    }
+
+    private String escape(String val) {
+        if (val == null) return "";
+        return val.replace("\n", "\\n").replace("|", "/");
+    }
+
+    private String unescape(String val) {
+        if (val == null) return "";
+        return val.replace("\\n", "\n");
     }
 }

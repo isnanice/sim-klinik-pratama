@@ -20,9 +20,13 @@ public class LayananUmum extends Layanan {
     }
 
     @Override
+    public double hitungTarif() {
+        return this.tarifDasar;
+    }
+
+    @Override
     public double hitungTarif(double biayaTambahan) {
-        double tambahan = Math.max(0, biayaTambahan);
-        return this.tarifDasar + tambahan;
+        return super.hitungTarif(biayaTambahan);
     }
 }
 
