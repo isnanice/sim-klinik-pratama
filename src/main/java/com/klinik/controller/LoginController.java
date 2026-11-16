@@ -75,7 +75,15 @@ public class LoginController {
      */
     public MainFrame loginDanBukaMainFrame(String username, String password, JFrame loginFrame)
             throws DataTidakValidException, DataNotFoundException {
-        Petugas petugas = login(username, password);
+        login(username, password);
+        return bukaMainFrame(loginFrame);
+    }
+
+    /**
+     * Membuka MainFrame untuk sesi pengguna yang sudah berhasil diautentikasi.
+     */
+    public MainFrame bukaMainFrame(JFrame loginFrame) {
+        Petugas petugas = SesiPengguna.getSession();
 
         if (pasienDAO == null) pasienDAO = new PasienDAO();
         if (dokterDAO == null) dokterDAO = new DokterDAO();
@@ -84,8 +92,10 @@ public class LoginController {
         pasienDAO.setPemeriksaanDAO(pemeriksaanDAO);
         if (suratDAO == null) suratDAO = new SuratDAO();
 
-        DokterController dokterController = new DokterController(dokterDAO, pemeriksaanDAO, petugas.getRole());
-        LayananController layananController = new LayananController(layananDAO, petugas.getRole());
+        DokterController dokterController = new DokterController(dokterDAO, pemeriksaanDAO,
+                petugas != null ? petugas.getRole() : null);
+        LayananController layananController = new LayananController(layananDAO,
+                petugas != null ? petugas.getRole() : null);
         PasienController pasienController = new PasienController(pasienDAO, pemeriksaanDAO);
         SuratController suratController = new SuratController(suratDAO, pemeriksaanDAO);
 

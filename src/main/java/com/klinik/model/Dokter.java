@@ -4,7 +4,7 @@ package com.klinik.model;
  * Entitas Dokter dalam Sistem Informasi Manajemen Klinik Pratama.
  * Mewarisi Orang dan mengimplementasikan DapatDicetak.
  */
-public class Dokter extends Orang {
+public class Dokter extends Orang implements DapatDicetak {
     private String nomorRegistrasi;
     private String bidangPelayanan;
 
@@ -12,9 +12,18 @@ public class Dokter extends Orang {
         super();
     }
 
+    public Dokter(String id, String nama, String alamat, String noTelepon,
+                  String nomorRegistrasi, String bidangPelayanan) {
+        super(id, nama, alamat, noTelepon);
+        this.nomorRegistrasi = nomorRegistrasi;
+        this.bidangPelayanan = bidangPelayanan;
+    }
+
     public Dokter(String id, String nama, JenisKelamin jenisKelamin, String alamat,
                   String noTelepon, String nomorRegistrasi, String bidangPelayanan, boolean aktif) {
-        super(id, nama, jenisKelamin, alamat, noTelepon, aktif);
+        super(id, nama, alamat, noTelepon);
+        this.jenisKelamin = jenisKelamin;
+        this.aktif = aktif;
         this.nomorRegistrasi = nomorRegistrasi;
         this.bidangPelayanan = bidangPelayanan;
     }
@@ -38,6 +47,11 @@ public class Dokter extends Orang {
     @Override
     public String getPeran() {
         return "Dokter (" + (bidangPelayanan != null ? bidangPelayanan : "Umum") + ")";
+    }
+
+    @Override
+    public void tampilkanInfo() {
+        System.out.println(cetakRingkasan());
     }
 
     @Override

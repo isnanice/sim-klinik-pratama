@@ -126,6 +126,10 @@ public class Surat implements DapatDicetak {
         this.jumlahHari = jumlahHari;
     }
 
+    public void setJumlahHari(Integer jumlahHari) throws DataTidakValidException {
+        setJumlahHari(jumlahHari != null ? jumlahHari.intValue() : 0);
+    }
+
     public String getTujuanRujukan() {
         return tujuanRujukan;
     }

@@ -7,9 +7,9 @@ import com.klinik.exception.DataTidakValidException;
  * Mewarisi Orang dan terhubung ke enum Role serta JenisKelamin.
  * Mendukung keterkaitan idDokter apabila pengguna berperan sebagai DOKTER.
  */
-public class Petugas extends Orang implements DapatDicetak {
+public class Petugas extends Orang {
     private String username;
-    private String password;
+    private String passwordHash;
     private Role role;
     private String idDokter;
 
@@ -19,16 +19,27 @@ public class Petugas extends Orang implements DapatDicetak {
         this.idDokter = "";
     }
 
-    public Petugas(String id, String nama, JenisKelamin jenisKelamin, String alamat,
-                   String noTelepon, boolean aktif, String username, String password, Role role) {
-        this(id, nama, jenisKelamin, alamat, noTelepon, aktif, username, password, role, "");
+    public Petugas(String id, String nama, String alamat, String noTelepon,
+                   String username, String passwordHash, Role role) {
+        super(id, nama, alamat, noTelepon);
+        setUsername(username);
+        setPasswordHash(passwordHash);
+        setRole(role);
+        this.idDokter = "";
     }
 
     public Petugas(String id, String nama, JenisKelamin jenisKelamin, String alamat,
-                   String noTelepon, boolean aktif, String username, String password, Role role, String idDokter) {
-        super(id, nama, jenisKelamin, alamat, noTelepon, aktif);
+                   String noTelepon, boolean aktif, String username, String passwordHash, Role role) {
+        this(id, nama, jenisKelamin, alamat, noTelepon, aktif, username, passwordHash, role, "");
+    }
+
+    public Petugas(String id, String nama, JenisKelamin jenisKelamin, String alamat,
+                   String noTelepon, boolean aktif, String username, String passwordHash, Role role, String idDokter) {
+        super(id, nama, alamat, noTelepon);
+        this.jenisKelamin = jenisKelamin;
+        this.aktif = aktif;
         this.username = username;
-        this.password = password;
+        this.passwordHash = passwordHash;
         this.role = role != null ? role : Role.PETUGAS;
         this.idDokter = idDokter != null ? idDokter.trim() : "";
     }
@@ -45,18 +56,22 @@ public class Petugas extends Orang implements DapatDicetak {
     }
 
     public String getPassword() {
-        return password;
+        return passwordHash;
     }
 
     public void setPassword(String password) throws DataTidakValidException {
-        if (password == null || password.trim().isEmpty()) {
-            throw new DataTidakValidException("Password", "Password wajib diisi dan tidak boleh kosong.");
-        }
-        this.password = password;
+        setPasswordHash(password);
     }
 
     public String getPasswordHash() {
-        return password;
+        return passwordHash;
+    }
+
+    public void setPasswordHash(String passwordHash) throws DataTidakValidException {
+        if (passwordHash == null || passwordHash.trim().isEmpty()) {
+            throw new DataTidakValidException("Password", "Password wajib diisi dan tidak boleh kosong.");
+        }
+        this.passwordHash = passwordHash;
     }
 
     public Role getRole() {
@@ -83,11 +98,11 @@ public class Petugas extends Orang implements DapatDicetak {
         return role != null ? role.getLabel() : "Petugas";
     }
 
-    public String tampilkanInfo() {
-        return cetakRingkasan();
+    @Override
+    public void tampilkanInfo() {
+        System.out.println(cetakRingkasan());
     }
 
-    @Override
     public String cetakRingkasan() {
         StringBuilder sb = new StringBuilder();
         sb.append(String.format("%-18s: %s%n", "ID Petugas", id != null ? id : "-"));
