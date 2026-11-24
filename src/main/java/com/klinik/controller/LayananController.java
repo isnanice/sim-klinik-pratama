@@ -36,7 +36,8 @@ public class LayananController {
 
     private void checkAdminAccess(String action) throws AksesDitolakException {
         if (currentRole != Role.ADMIN) {
-            throw new AksesDitolakException("Role PETUGAS tidak dapat " + action + " data layanan. Hanya dapat melihat data.");
+            String role = currentRole != null ? currentRole.getLabel() : "ini";
+            throw new AksesDitolakException("Role " + role + " tidak dapat " + action + " data layanan. Hanya dapat melihat data.");
         }
     }
 

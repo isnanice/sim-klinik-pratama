@@ -280,6 +280,11 @@ public class PemeriksaanView extends JPanel {
 
     /** Memuat pilihan pasien, dokter, dan layanan aktif (BR-07). */
     public void muatPilihan() {
+        // Pilihan pendaftaran hanya dimuat untuk role yang boleh mendaftarkan kunjungan (Admin, Petugas).
+        // Tanpa pemeriksaan ini, role Dokter mendapat dialog "Akses Ditolak" setiap kali login.
+        if (!HakAkses.memilikiAkses(HakAkses.DAFTAR_KUNJUNGAN)) {
+            return;
+        }
         try {
             isi(cmbPasien, controller.pasienAktif());
             isi(cmbDokter, controller.dokterAktif());

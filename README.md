@@ -30,6 +30,7 @@ Akun contoh (dari seed.sql):
 | admin    | admin123    | ADMIN   |
 | petugas  | petugas123  | PETUGAS |
 | dokter   | dokter123   | DOKTER  |
+| nonaktif | petugas123  | PETUGAS (akun nonaktif, login ditolak sesuai BR-01) |
 
 ## 3. Pengujian
 

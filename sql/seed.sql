@@ -28,7 +28,10 @@ INSERT INTO petugas (id_petugas, nama, alamat, no_telepon, username, password_ha
 ('PTG-002', 'Rudi Hartono',  'Jl. Braga No. 2, Bandung',       '081100000002', 'petugas',
  'a4367203e444ad6212d5446d5f0a77b0:b9e173e77601f1ca5f110ba813bdb3e4c957fa3718f2c38b963cd9908b8a7d98', 'PETUGAS', NULL,      TRUE),
 ('PTG-003', 'dr. Ani Wijaya', 'Jl. Cempaka No. 9, Bandung',    '081777889900', 'dokter',
- '93845b4d04a8f65f52cdb831e898db12:2a57640d4cabcc98961bbe652e1fd444b0058e489956bef04cfe7fdfc15a7ec0', 'DOKTER',  'DKT-006', TRUE);
+ '93845b4d04a8f65f52cdb831e898db12:2a57640d4cabcc98961bbe652e1fd444b0058e489956bef04cfe7fdfc15a7ec0', 'DOKTER',  'DKT-006', TRUE),
+-- Akun nonaktif untuk menguji BR-01 (password: petugas123); login harus ditolak.
+('PTG-004', 'Dewi Lestari', 'Jl. Riau No. 4, Bandung',        '081100000004', 'nonaktif',
+ '418a0d82232be8419d3769cbb2edb3e8:a34043a2687d517007def0a39d1666462226e98eb8d17728f6507940e088700d', 'PETUGAS', NULL,      FALSE);
 
 -- ---------------------------------------------------------------------
 -- Layanan (tarif dasar; layanan SPESIALIS ditambah biaya konsultasi di kode Java)

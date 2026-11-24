@@ -234,6 +234,10 @@ public class LayananView extends JPanel {
     public void applyRolePermissions() {
         boolean isAdmin = controller.getCurrentRole() == Role.ADMIN;
         lblRoleNote.setVisible(!isAdmin);
+        if (!isAdmin && controller.getCurrentRole() != null) {
+            lblRoleNote.setText("Anda login sebagai " + controller.getCurrentRole().getLabel()
+                    + ". Data layanan hanya dapat dilihat.");
+        }
 
         txtNamaLayanan.setEnabled(isAdmin);
         txtNamaLayanan.setBackground(isAdmin ? UITheme.SURFACE : UITheme.READ_ONLY_BG);

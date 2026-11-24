@@ -349,6 +349,14 @@ public class MainFrame extends JFrame {
     }
 
     public void tampilkan(String namaKartu) {
+        // Halaman yang menunya tersembunyi untuk role ini tidak boleh dibuka lewat jalur lain.
+        String izin = izinKartu(namaKartu);
+        if (izin != null && !HakAkses.memilikiAkses(currentRole, izin)) {
+            JOptionPane.showMessageDialog(this,
+                    "Role " + currentRole.getLabel() + " tidak memiliki akses ke halaman ini.",
+                    "Akses Ditolak", JOptionPane.ERROR_MESSAGE);
+            return;
+        }
         if ("PASIEN".equals(namaKartu)) {
             pasienView.applyRolePermissions();
             pasienView.refreshTable();
@@ -370,6 +378,23 @@ public class MainFrame extends JFrame {
             pembayaranView.segarkan();
         }
         cardLayout.show(mainContainer, namaKartu);
+    }
+
+    /** Izin menu yang dibutuhkan setiap kartu CardLayout (HakAkses). */
+    private static String izinKartu(String namaKartu) {
+        if (namaKartu == null) return null;
+        switch (namaKartu) {
+            case "BERANDA":     return HakAkses.MENU_BERANDA;
+            case "PASIEN":      return HakAkses.MENU_PASIEN;
+            case "DOKTER":      return HakAkses.MENU_DOKTER;
+            case "LAYANAN":     return HakAkses.MENU_LAYANAN;
+            case "ANTREAN":     return HakAkses.MENU_ANTREAN;
+            case "PEMERIKSAAN": return HakAkses.MENU_PEMERIKSAAN;
+            case "REKAM_MEDIS": return HakAkses.MENU_REKAM_MEDIS;
+            case "SURAT":       return HakAkses.MENU_SURAT;
+            case "PEMBAYARAN":  return HakAkses.MENU_PEMBAYARAN;
+            default:            return null;
+        }
     }
 
     private void prosesLogout() {

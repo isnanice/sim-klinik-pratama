@@ -255,6 +255,10 @@ public class DokterView extends JPanel {
     public void applyRolePermissions() {
         boolean isAdmin = controller.getCurrentRole() == Role.ADMIN;
         lblRoleNote.setVisible(!isAdmin);
+        if (!isAdmin && controller.getCurrentRole() != null) {
+            lblRoleNote.setText("Anda login sebagai " + controller.getCurrentRole().getLabel()
+                    + ". Data dokter hanya dapat dilihat.");
+        }
 
         // Mode Petugas: hanya-lihat (form disabled & tombol modifikasi disabled)
         txtNama.setEnabled(isAdmin);

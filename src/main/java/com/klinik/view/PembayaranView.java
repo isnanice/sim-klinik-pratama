@@ -302,6 +302,14 @@ public class PembayaranView extends JPanel {
 
     /** Memuat ulang pilihan kunjungan siap bayar dan tabel riwayat. */
     public void segarkan() {
+        // Halaman Pembayaran hanya untuk Admin dan Petugas (Tabel 2.1). Role lain tidak memuat data,
+        // sehingga tidak muncul dialog "Akses Ditolak" saat login.
+        if (!HakAkses.memilikiAkses(HakAkses.KELOLA_PEMBAYARAN)) {
+            cmbKunjungan.removeAllItems();
+            riwayat = new ArrayList<>();
+            modelRiwayat.setRowCount(0);
+            return;
+        }
         sedangMemuat = true;
         try {
             cmbKunjungan.removeAllItems();

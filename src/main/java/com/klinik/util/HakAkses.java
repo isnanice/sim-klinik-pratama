@@ -81,10 +81,12 @@ public final class HakAkses {
         );
         PERMISSIONS.put(Role.PETUGAS, Collections.unmodifiableSet(petugasPerms));
 
-        // Hak Akses DOKTER: Lihat pasien, lihat antrean, pemeriksaan medis, rekam medis, dan buat surat izin/rujukan
+        // Hak Akses DOKTER (Tabel 4.6): lihat pasien, dokter, dan layanan; kelola antrean,
+        // pemeriksaan, dan rekam medis; membuat surat izin/rujukan
         Set<String> dokterPerms = new HashSet<>();
         Collections.addAll(dokterPerms,
-                MENU_BERANDA, MENU_PASIEN, MENU_ANTREAN, MENU_REKAM_MEDIS, MENU_SURAT,
+                MENU_BERANDA, MENU_PASIEN, MENU_DOKTER, MENU_LAYANAN,
+                MENU_ANTREAN, MENU_REKAM_MEDIS, MENU_SURAT,
                 LIHAT_PASIEN,
                 LIHAT_DOKTER,
                 LIHAT_LAYANAN,
